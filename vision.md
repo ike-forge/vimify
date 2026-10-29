@@ -64,11 +64,6 @@ tool's config format and location.
   tool, in the style of Catppuccin ports. Adding a tool should not require a
   vimify release.
 
-## Open questions
+## Design
 
-- Architecture (follow-up). Stack: see [stack.md](stack.md).
-- Mapping format and how it expresses partial edits to each config format
-  (YAML, TOML, JSON, Lua, INI, ...).
-- Behaviour when a tool's config changes after vimify applied it (re-apply,
-  merge, warn).
-- Backup policy on repeated installs: keep only the first original, or rotate.
+See [stack.md](stack.md) and [architecture.md](architecture.md).
