@@ -7,6 +7,28 @@
 | UI          | ratatui + crossterm             |
 | Own config  | TOML                            |
 
+## Tool config editing
+
+Edits must preserve comments, ordering and quoting of everything vimify does
+not own.
+
+| Format             | Approach                                           |
+| ------------------ | -------------------------------------------------- |
+| TOML               | `toml_edit`                                        |
+| YAML               | `yaml-edit` (rowan CST)                            |
+| JSON / JSONC       | `jsonc-parser`, `cst` feature                      |
+| Line-based (`txt`) | Owned block between `# >>> vimify >>>` markers     |
+
+Preferred over all of the above: if the tool supports `include`/`import`/
+`source` (kitty, tmux, alacritty, git), write a vimify-owned file and add one
+include line.
+
+> **Weak point:** `yaml-edit` is a single-maintainer crate with little adoption.
+> It passed preservation tests on lazygit-style configs (nested set, key insert,
+> flow maps, comments), but it should be replaced once a mature
+> format-preserving YAML crate exists. Keep it behind an internal
+> `set(path, value)` interface so the swap stays local.
+
 ## Why ratatui
 
 Prompt crates (dialoguer, inquire) would cover a progress bar and a
@@ -63,8 +85,5 @@ carries them to new machines.
 
 ## Open questions
 
-- Format-preserving edits for non-TOML tool configs. `toml_edit` covers TOML;
-  YAML has no mature format-preserving crate in Rust, and many TUI tools
-  (lazygit, lazysql, k9s) use YAML.
 - Whether to add non-interactive subcommands (`vimify apply --all`) for
   scripting. Implies `clap`.
