@@ -50,7 +50,11 @@ mise run run     # run vimify
 mise run test
 mise run lint    # fmt --check + clippy -D warnings
 mise run fmt
+mise run sandbox # fresh Debian container with vimify + target tools
 ```
+
+The sandbox (`docker/Dockerfile`) pins tool versions and verifies release
+checksums. Add a tool there when adding its port.
 
 ## Interface
 
