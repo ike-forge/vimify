@@ -36,15 +36,21 @@ all supported tools at once (recommended).
 
 One reference config drives every tool:
 
-```yaml
-theme: catppuccin-frappe
-keys:
-  left: h
-  down: j
-  up: k
-  right: l
-  yank: y
-  delete: d
+`~/.config/vimify/config.toml`:
+
+```toml
+theme = "catppuccin-frappe"
+
+[keys]
+left = "h"
+down = "j"
+up = "k"
+right = "l"
+yank = "y"
+delete = "d"
+
+[scan]
+extra_paths = ["~/tools/bin"]
 ```
 
 Commit it to your dotfiles. Committing the generated tool configs is only useful
@@ -56,3 +62,14 @@ Tool mappings currently ship with vimify. Community-maintained mappings, in the
 style of Catppuccin ports, are planned.
 
 See [vision.md](vision.md) for the longer-term direction.
+
+## Development
+
+Requires [mise](https://mise.jdx.dev).
+
+```sh
+mise install
+mise run run
+```
+
+See [stack.md](stack.md) for the full task list.

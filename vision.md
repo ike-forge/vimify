@@ -38,15 +38,16 @@ Per tool, or for all supported tools at once:
 
 The single source of truth the user edits. Example:
 
-```yaml
-theme: catppuccin-frappe
-keys:
-  left: h
-  down: j
-  up: k
-  right: l
-  yank: y
-  delete: d
+```toml
+theme = "catppuccin-frappe"
+
+[keys]
+left = "h"
+down = "j"
+up = "k"
+right = "l"
+yank = "y"
+delete = "d"
 ```
 
 The reference config, and optionally the generated tool configs, are meant to be
@@ -65,7 +66,7 @@ tool's config format and location.
 
 ## Open questions
 
-- Stack and architecture (follow-up).
+- Architecture (follow-up). Stack: see [stack.md](stack.md).
 - Mapping format and how it expresses partial edits to each config format
   (YAML, TOML, JSON, Lua, INI, ...).
 - Behaviour when a tool's config changes after vimify applied it (re-apply,
