@@ -1,0 +1,23 @@
+schema = 1
+version = "0.1.0"
+binaries = ["lazygit"]
+
+[target]
+format = "yaml"
+strategy = "edit"
+key_notation = "angle"
+paths = [
+  "$LG_CONFIG_FILE",
+  "$XDG_CONFIG_HOME/lazygit/config.yml",
+  "~/Library/Application Support/lazygit/config.yml",
+]
+
+[keys]
+"keybinding.universal.prevItem" = "up"
+"keybinding.universal.nextItem" = "down"
+"keybinding.universal.prevBlock" = "left"
+"keybinding.universal.nextBlock" = "right"
+
+[theme]
+"gui.theme.activeBorderColor" = ["{accent}", "bold"]
+"gui.theme.selectedLineBgColor" = ["{selection}"]
