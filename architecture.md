@@ -129,10 +129,13 @@ trait Editor {
 
 ### Backups and state
 
-- Backup is written once, on the first apply: `config.yml.bak`. Re-applies never
-  overwrite it, so it always holds the pre-vimify file. If a `.bak` vimify did
-  not create already exists, use `.vimify.bak`.
-- Writes are atomic (temp file + rename).
+- Before vimify modifies or deletes an existing file, it copies it to the first
+  free name of `config.yml.bak`, `config.yml.bak.1`, `config.yml.bak.2`, ...
+  An existing file is never overwritten, whoever created it.
+- State keeps the backup from the first apply as the revert target, so revert
+  restores the pre-vimify file however many re-applies happened since.
+- Creating a missing file needs no backup.
+- Writes are atomic (temp file + rename), through symlinks.
 - State lives in `~/.local/state/vimify/state.toml`, per tool: port version,
   target path, backup path, hash of the reference used, hash of the file after
   apply.
