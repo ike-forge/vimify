@@ -1,5 +1,6 @@
 [tools]
 rust = { version = "1.99.0", components = "clippy,rustfmt" }
+kind = "0.33.0"
 
 [tasks.build]
 run = "cargo build --release"
@@ -27,11 +28,28 @@ docker build "$@" -f docker/Dockerfile -t vimify-sandbox .
 
 # Fresh container each run: no state carries over. The host Docker socket is
 # mounted for lazydocker, which gives the container control of host Docker.
+# If the kind cluster exists, the container joins its network for k9s.
 [tasks.sandbox]
 depends = ["sandbox:build"]
 run = """
 set --
 sock=/var/run/docker.sock
 [ -S "$sock" ] && set -- -v "$sock:$sock" --group-add "$(stat -c %g "$sock" 2>/dev/null || stat -f %g "$sock")"
+if kind get clusters 2>/dev/null | grep -qx vimify; then
+  set -- "$@" --network kind -e SANDBOX_KUBECONFIG="$(kind get kubeconfig --internal --name vimify)"
+fi
 docker run --rm -it "$@" vimify-sandbox
 """
+
+# Opt-in: pulls a ~1GB node image and keeps a cluster running on host Docker.
+[tasks."sandbox:cluster"]
+run = """
+kind get clusters 2>/dev/null | grep -qx vimify && exit 0
+# Keeps the cluster out of the host ~/.kube/config.
+cfg=$(mktemp)
+kind create cluster --name vimify --kubeconfig "$cfg"
+rm -f "$cfg"
+"""
+
+[tasks."sandbox:cluster:delete"]
+run = "kind delete cluster --name vimify"

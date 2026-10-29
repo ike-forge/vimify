@@ -55,7 +55,10 @@ mise run sandbox # fresh Debian container with vimify + target tools
 
 The sandbox installs release binaries pinned by sha256 in `docker/tools.lock`
 (apt for distro-packaged tools). Add a tool there when adding its port. The host
-Docker socket is mounted when present, for lazydocker.
+Docker socket is mounted when present, for lazydocker. `mise run
+sandbox:cluster` starts a kind cluster for k9s; the sandbox joins it when it
+exists. Demo data comes from `docker/seed.sh`; `~` is itself a git repo, so
+`lazygit` in `~` shows what vimify changed.
 
 ## Interface
 

@@ -64,6 +64,13 @@ tool's config format and location.
   tool, in the style of Catppuccin ports. Adding a tool should not require a
   vimify release.
 
+## Ideas
+
+Not committed to; brainstorm before building, drop if not useful.
+
+- **Profiles.** Named sets of reference config. `vimify` uses the default
+  profile; `vimify scan <profile>` and `vimify apply <profile>` target another.
+
 ## Design
 
 See [stack.md](stack.md) and [architecture.md](architecture.md).

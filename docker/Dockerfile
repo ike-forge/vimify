@@ -46,21 +46,14 @@ RUN set -eu; \
 
 COPY --from=build /vimify /usr/local/bin/vimify
 
+COPY docker/entrypoint.sh /usr/local/bin/sandbox-entrypoint
 RUN useradd -m -s /bin/bash dev
 USER dev
 WORKDIR /home/dev
 ENV TERM=xterm-256color COLORTERM=truecolor
 
-# Demo data so each tool has something to show. The lazysql config doubles as
-# pre-existing user config that vimify must preserve.
-RUN git config --global user.name dev \
-    && git config --global user.email dev@localhost \
-    && git init -q demo \
-    && git -C demo commit -q --allow-empty -m init \
-    && sqlite3 demo.db "create table users (id integer primary key, name text); \
-       insert into users (name) values ('ada'), ('linus'), ('grace');" \
-    && mkdir -p .config/lazysql \
-    && printf "[[database]]\nName = 'demo'\nProvider = 'sqlite3'\nURL = '/home/dev/demo.db'\n" \
-       > .config/lazysql/config.toml
+COPY --chown=dev docker/seed.sh /tmp/seed.sh
+RUN sh /tmp/seed.sh && rm /tmp/seed.sh
 
+ENTRYPOINT ["sandbox-entrypoint"]
 CMD ["bash"]
