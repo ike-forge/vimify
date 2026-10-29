@@ -1,0 +1,9 @@
+schema = 1
+version = "0.1.0"
+binaries = ["lfk"]
+
+# Keys under `keybindings`, theme via `colorscheme` (ships catppuccin presets).
+[target]
+format = "yaml"
+strategy = "edit"
+paths = ["$XDG_CONFIG_HOME/lfk/config.yaml"]

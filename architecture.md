@@ -173,3 +173,5 @@ src/
 - Multi-file targets: yazi splits `keymap.toml` and `theme.toml`, and its
   keymaps are arrays of `{ on, run }`, not key paths.
 - RON (gitui `key_bindings.ron`, `theme.ron`): no format-preserving editor.
+- Tools that rewrite their own config (btop on every exit) break the
+  file-hash `modified` check. Compare only owned values instead?

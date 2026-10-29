@@ -18,7 +18,7 @@ ARG TARGETARCH
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-       bat ca-certificates curl git less sqlite3 unzip \
+       bat btop ca-certificates curl git less sqlite3 unzip \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=extra-ca . /usr/local/share/ca-certificates/
 RUN update-ca-certificates

@@ -1,0 +1,9 @@
+schema = 1
+version = "0.1.0"
+binaries = ["k9s"]
+
+# Theme is a skin file (skins/<name>.yaml) selected by k9s.ui.skin.
+[target]
+format = "yaml"
+strategy = "edit"
+paths = ["$K9S_CONFIG_DIR/config.yaml", "$XDG_CONFIG_HOME/k9s/config.yaml"]

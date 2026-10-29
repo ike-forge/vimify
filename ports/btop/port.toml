@@ -1,0 +1,10 @@
+schema = 1
+version = "0.1.0"
+binaries = ["btop"]
+
+# `key = value` lines; values are not TOML (`vim_keys = True`). btop rewrites
+# the whole file on exit: values survive, comments and markers do not.
+[target]
+format = "lines"
+strategy = "edit"
+paths = ["$XDG_CONFIG_HOME/btop/btop.conf"]
