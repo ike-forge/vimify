@@ -1,0 +1,12 @@
+# arch  sha256  url  binaries...
+# sha256 is the GitHub release asset digest. Binaries are found anywhere in the archive.
+amd64 7b3f30c2c06a42cf575280f907e58d7ea08411408b6b62bc926bc91cbc6c3f46 https://github.com/jesseduffield/lazygit/releases/download/v0.66.1/lazygit_0.66.1_linux_x86_64.tar.gz lazygit
+arm64 add91327af13343f37d2d610512d0982ef5c75da5cc962b5159748adc8a11a86 https://github.com/jesseduffield/lazygit/releases/download/v0.66.1/lazygit_0.66.1_linux_arm64.tar.gz lazygit
+amd64 0d9dbfc26068b218e7ed84b104748cadc6e3cf733c0afd35465306fb39b9523c https://github.com/jesseduffield/lazydocker/releases/download/v0.25.2/lazydocker_0.25.2_Linux_x86_64.tar.gz lazydocker
+arm64 005c38b685aaa557e7d646d83a3dadb5024340eeed8c6a2e1949eee6f530de23 https://github.com/jesseduffield/lazydocker/releases/download/v0.25.2/lazydocker_0.25.2_Linux_arm64.tar.gz lazydocker
+amd64 ebc3edeb848c7e557f88177cf6b2ca7e492ef158e2aa1dce18eb137d1d0726fc https://github.com/jorgerojas26/lazysql/releases/download/v0.7.0/lazysql_Linux_x86_64.tar.gz lazysql
+arm64 2157e58f107bd9c250ad4d106e31d3f3484cfd93280b1c59f25a2dd0965e9128 https://github.com/jorgerojas26/lazysql/releases/download/v0.7.0/lazysql_Linux_arm64.tar.gz lazysql
+amd64 f6149b9ae203397158b0c89c13cfde718e7121d3d3cd2ebc597f93d6628d9b5b https://github.com/gitui-org/gitui/releases/download/v0.28.1/gitui-linux-x86_64.tar.gz gitui
+arm64 2a640da05b73e9152a7bf92bfd7c23acd9d60438f4f2cabb62357014a5fd7c28 https://github.com/gitui-org/gitui/releases/download/v0.28.1/gitui-linux-aarch64.tar.gz gitui
+amd64 a02fe91d3304294048c681f010f1100856872a4e98ecf6927328e888d40a6ad2 https://github.com/sxyazi/yazi/releases/download/v26.9.1/yazi-x86_64-unknown-linux-gnu.zip yazi ya
+arm64 02807f08d6b589b65b7516a4e259d83f5995d7a23bb12b3a155141385b370b3a https://github.com/sxyazi/yazi/releases/download/v26.9.1/yazi-aarch64-unknown-linux-gnu.zip yazi ya

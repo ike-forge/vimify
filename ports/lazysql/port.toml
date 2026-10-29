@@ -1,0 +1,8 @@
+schema = 1
+version = "0.1.0"
+binaries = ["lazysql"]
+
+[target]
+format = "toml"
+strategy = "edit"
+paths = ["$XDG_CONFIG_HOME/lazysql/config.toml"]

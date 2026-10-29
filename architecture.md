@@ -167,3 +167,9 @@ src/
   reference must equal `*.expected.*`. CI runs them for all ports.
 - Editors get preservation tests (comments, ordering, quoting, flow style).
 - `apply`/`revert` run against a temp `$HOME`.
+
+## Open questions
+
+- Multi-file targets: yazi splits `keymap.toml` and `theme.toml`, and its
+  keymaps are arrays of `{ on, run }`, not key paths.
+- RON (gitui `key_bindings.ron`, `theme.ron`): no format-preserving editor.

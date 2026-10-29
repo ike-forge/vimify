@@ -15,42 +15,52 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 
 FROM debian:trixie-slim
 ARG TARGETARCH
-ARG LAZYGIT_VERSION=0.66.1
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl git less \
+    && apt-get install -y --no-install-recommends \
+       bat ca-certificates curl git less sqlite3 unzip \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=extra-ca . /usr/local/share/ca-certificates/
 RUN update-ca-certificates
 
+COPY docker/tools.lock /tmp/tools.lock
 RUN set -eu; \
-    case "$TARGETARCH" in \
-      amd64) arch=x86_64 ;; \
-      arm64) arch=arm64 ;; \
-      *) echo "unsupported arch: $TARGETARCH" >&2; exit 1 ;; \
-    esac; \
-    install_release() { \
-      repo=$1 tag=$2 file=$3 bin=$4; \
-      base="https://github.com/$repo/releases/download/$tag"; \
-      curl -fsSLO "$base/$file"; \
-      curl -fsSL "$base/checksums.txt" | grep " $file\$" | sha256sum -c -; \
-      tar -xzf "$file" -C /usr/local/bin "$bin"; \
-      rm "$file"; \
-    }; \
     cd /tmp; \
-    install_release jesseduffield/lazygit "v$LAZYGIT_VERSION" "lazygit_${LAZYGIT_VERSION}_linux_${arch}.tar.gz" lazygit
+    while read -r arch sha url bins; do \
+      [ "$arch" = "$TARGETARCH" ] || continue; \
+      file=${url##*/}; \
+      curl -fsSLo "$file" "$url"; \
+      echo "$sha  $file" | sha256sum -c -; \
+      mkdir x; \
+      case "$file" in \
+        *.zip) unzip -q "$file" -d x ;; \
+        *) tar -xzf "$file" -C x ;; \
+      esac; \
+      for bin in $bins; do \
+        find x -type f -name "$bin" -exec install -m 755 {} /usr/local/bin/ \; ; \
+        [ -x "/usr/local/bin/$bin" ] || { echo "$bin not in $file" >&2; exit 1; }; \
+      done; \
+      rm -rf x "$file"; \
+    done < tools.lock; \
+    rm tools.lock
 
 COPY --from=build /vimify /usr/local/bin/vimify
 
 RUN useradd -m -s /bin/bash dev
 USER dev
 WORKDIR /home/dev
-ENV TERM=xterm-256color
+ENV TERM=xterm-256color COLORTERM=truecolor
 
-# A repo so lazygit has something to show.
+# Demo data so each tool has something to show. The lazysql config doubles as
+# pre-existing user config that vimify must preserve.
 RUN git config --global user.name dev \
     && git config --global user.email dev@localhost \
     && git init -q demo \
-    && git -C demo commit -q --allow-empty -m init
+    && git -C demo commit -q --allow-empty -m init \
+    && sqlite3 demo.db "create table users (id integer primary key, name text); \
+       insert into users (name) values ('ada'), ('linus'), ('grace');" \
+    && mkdir -p .config/lazysql \
+    && printf "[[database]]\nName = 'demo'\nProvider = 'sqlite3'\nURL = '/home/dev/demo.db'\n" \
+       > .config/lazysql/config.toml
 
 CMD ["bash"]

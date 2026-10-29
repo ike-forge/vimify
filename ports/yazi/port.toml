@@ -1,0 +1,6 @@
+schema = 1
+version = "0.1.0"
+binaries = ["yazi"]
+
+# No [target] yet: yazi splits keymap.toml and theme.toml, and keymaps are
+# arrays of { on, run } rather than key paths. Needs multi-file targets.

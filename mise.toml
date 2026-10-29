@@ -25,7 +25,13 @@ set --
 docker build "$@" -f docker/Dockerfile -t vimify-sandbox .
 """
 
-# Fresh container each run: no state carries over.
+# Fresh container each run: no state carries over. The host Docker socket is
+# mounted for lazydocker, which gives the container control of host Docker.
 [tasks.sandbox]
 depends = ["sandbox:build"]
-run = "docker run --rm -it vimify-sandbox"
+run = """
+set --
+sock=/var/run/docker.sock
+[ -S "$sock" ] && set -- -v "$sock:$sock" --group-add "$(stat -c %g "$sock" 2>/dev/null || stat -f %g "$sock")"
+docker run --rm -it "$@" vimify-sandbox
+"""

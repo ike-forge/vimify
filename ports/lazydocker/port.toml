@@ -1,0 +1,8 @@
+schema = 1
+version = "0.1.0"
+binaries = ["lazydocker"]
+
+[target]
+format = "yaml"
+strategy = "edit"
+paths = ["$CONFIG_DIR/config.yml", "$XDG_CONFIG_HOME/lazydocker/config.yml"]

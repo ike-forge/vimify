@@ -1,0 +1,5 @@
+schema = 1
+version = "0.1.0"
+binaries = ["gitui"]
+
+# No [target] yet: key_bindings.ron and theme.ron are RON, which has no editor.

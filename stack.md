@@ -53,8 +53,9 @@ mise run fmt
 mise run sandbox # fresh Debian container with vimify + target tools
 ```
 
-The sandbox (`docker/Dockerfile`) pins tool versions and verifies release
-checksums. Add a tool there when adding its port.
+The sandbox installs release binaries pinned by sha256 in `docker/tools.lock`
+(apt for distro-packaged tools). Add a tool there when adding its port. The host
+Docker socket is mounted when present, for lazydocker.
 
 ## Interface
 
