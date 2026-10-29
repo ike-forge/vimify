@@ -39,6 +39,14 @@ impl ScanScreen {
         }
     }
 
+    pub fn finished(&self) -> bool {
+        self.finished
+    }
+
+    pub fn found(&self) -> &[Detection] {
+        &self.found
+    }
+
     pub fn render(&self, frame: &mut Frame) {
         let [title, gauge, list, footer] = Layout::vertical([
             Constraint::Length(2),

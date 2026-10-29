@@ -6,5 +6,11 @@ fn main() -> Result<()> {
     let ports = port::embedded()?;
     let extra = reference.scan.extra_paths.iter().map(String::as_str);
     let dirs = scan::resolve_dirs(scan::DEFAULT_DIRS.iter().copied().chain(extra));
-    ui::run(dirs, ports)
+    let Some(selection) = ui::run(dirs, ports, &reference.exclusions)? else {
+        return Ok(());
+    };
+    // TODO: replace with the confirm screen.
+    println!("selected: {}", selection.selected.join(", "));
+    println!("excluded: {}", selection.excluded.join(", "));
+    Ok(())
 }

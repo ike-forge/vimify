@@ -9,6 +9,8 @@ use crate::paths;
 #[serde(default)]
 pub struct Reference {
     pub scan: Scan,
+    /// Ports the user unchecked; they start unchecked on later runs.
+    pub exclusions: Vec<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
