@@ -6,16 +6,11 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{List, ListItem, ListState};
 
 use crate::paths;
+use crate::plan::Selection;
 use crate::scan::Detection;
 
 /// Rows above the tools: `apply to all`, `apply to none`.
 const ACTIONS: usize = 2;
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct Selection {
-    pub selected: Vec<String>,
-    pub excluded: Vec<String>,
-}
 
 pub struct SelectScreen {
     tools: Vec<(Detection, bool)>,
