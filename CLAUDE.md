@@ -7,7 +7,8 @@ Read `vision.md`, `stack.md` and `architecture.md` before changing behaviour.
 - `mise run lint`, `mise run test`, `mise run build`, `mise run run`.
 - Without mise: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`,
   `cargo test`.
-- `mise run sandbox` needs Docker; skip it where Docker is unavailable.
+- `mise run sandbox` and `mise run e2e` need Docker; skip them where Docker is
+  unavailable.
 
 ## Rules
 

@@ -2,8 +2,24 @@ schema = 1
 version = "0.1.0"
 binaries = ["lfk"]
 
-# Keys under `keybindings`, theme via `colorscheme` (ships catppuccin presets).
+# Theme only: navigation is fixed, and `delete` would move resource deletion from D
+# to a lowercase d.
 [target]
 format = "yaml"
 strategy = "edit"
-paths = ["$XDG_CONFIG_HOME/lfk/config.yaml"]
+paths = ["$LFK_CONFIG_DIR/config.yaml", "$XDG_CONFIG_HOME/lfk/config.yaml"]
+
+[theme]
+"theme.primary" = "{accent}"
+"theme.secondary" = "{success}"
+"theme.text" = "{text}"
+"theme.selected_fg" = "{base}"
+"theme.selected_bg" = "{accent}"
+"theme.border" = "{border}"
+"theme.dimmed" = "{muted}"
+"theme.error" = "{error}"
+"theme.warning" = "{warning}"
+"theme.purple" = "{special}"
+"theme.base" = "{base}"
+"theme.bar_bg" = "{selection}"
+"theme.surface" = "{surface}"

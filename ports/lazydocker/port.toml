@@ -2,7 +2,18 @@ schema = 1
 version = "0.1.0"
 binaries = ["lazydocker"]
 
+# Theme only: lazydocker has no configurable keybindings.
 [target]
 format = "yaml"
 strategy = "edit"
-paths = ["$CONFIG_DIR/config.yml", "$XDG_CONFIG_HOME/lazydocker/config.yml"]
+paths = [
+  "$CONFIG_DIR/config.yml",
+  "$XDG_CONFIG_HOME/lazydocker/config.yml",
+  "~/Library/Application Support/jesseduffield/lazydocker/config.yml",
+]
+
+[theme]
+"gui.theme.activeBorderColor" = ["{accent}", "bold"]
+"gui.theme.inactiveBorderColor" = ["{border}"]
+"gui.theme.selectedLineBgColor" = ["{selection}"]
+"gui.theme.optionsTextColor" = ["{accent}"]

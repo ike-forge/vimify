@@ -21,4 +21,9 @@ paths = [
 
 [theme]
 "gui.theme.activeBorderColor" = ["{accent}", "bold"]
+"gui.theme.inactiveBorderColor" = ["{border}"]
+"gui.theme.searchingActiveBorderColor" = ["{warning}", "bold"]
+"gui.theme.optionsTextColor" = ["{accent}"]
 "gui.theme.selectedLineBgColor" = ["{selection}"]
+"gui.theme.unstagedChangesColor" = ["{error}"]
+"gui.theme.defaultFgColor" = ["{text}"]

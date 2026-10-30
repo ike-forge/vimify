@@ -7,8 +7,19 @@ gui:
       - '#8caaee'
       - bold
     lightTheme: false # dark terminal
+    defaultFgColor:
+      - '#c6d0f5'
+    inactiveBorderColor:
+      - '#51576d'
+    optionsTextColor:
+      - '#8caaee'
+    searchingActiveBorderColor:
+      - '#e5c890'
+      - bold
     selectedLineBgColor:
       - '#414559'
+    unstagedChangesColor:
+      - '#e78284'
 
 git:
   paging:

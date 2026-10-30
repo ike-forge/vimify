@@ -188,6 +188,9 @@ src/
   reference must equal `*.expected.*`. CI runs them for all ports.
 - Editors get preservation tests (comments, ordering, quoting, flow style).
 - `apply`/`revert` run against a temp `$HOME`.
+- `docker/e2e.sh` drives the real vimify and real tools through tmux. Every port
+  needs a scenario there: golden tests prove the output, only the tool proves it
+  works. Test keys the tool does not bind by default, and that its own keys survive.
 
 ## Open questions
 

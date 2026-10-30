@@ -1,0 +1,7 @@
+# Cluster defaults
+appearance:
+  icons: nerdfont # patched font
+theme:
+  primary: "#ff0000" # my red
+keybindings:
+  logs: "ctrl+l"

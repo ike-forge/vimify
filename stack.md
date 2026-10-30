@@ -51,6 +51,7 @@ mise run test
 mise run lint    # fmt --check + clippy -D warnings
 mise run fmt
 mise run sandbox # fresh Debian container with vimify + target tools
+mise run e2e     # real vimify and tools in that container, through tmux
 ```
 
 The sandbox installs release binaries pinned by sha256 in `docker/tools.lock`

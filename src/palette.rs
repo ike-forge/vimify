@@ -5,7 +5,19 @@ use include_dir::{Dir, include_dir};
 
 static EMBEDDED: Dir = include_dir!("$CARGO_MANIFEST_DIR/palettes");
 
-pub const ROLES: &[&str] = &["accent", "selection"];
+pub const ROLES: &[&str] = &[
+    "accent",
+    "selection",
+    "text",
+    "muted",
+    "border",
+    "success",
+    "warning",
+    "error",
+    "special",
+    "base",
+    "surface",
+];
 
 #[derive(Debug, Clone)]
 pub struct Palette(BTreeMap<String, String>);
@@ -68,21 +80,23 @@ mod tests {
         assert!(load("nope").unwrap_err().to_string().contains("nope"));
     }
 
+    const FULL: &str = include_str!("../palettes/catppuccin-frappe.toml");
+
     #[test]
     fn missing_role_is_an_error() {
-        let err = parse("accent = \"#000000\"").unwrap_err();
+        let err = parse(&FULL.replace("selection = \"#414559\"\n", "")).unwrap_err();
         assert!(err.to_string().contains("selection"));
     }
 
     #[test]
     fn unknown_role_is_an_error() {
-        let err = parse("accent = \"#000000\"\nselection = \"#000000\"\nnew = \"#000000\"");
-        assert!(err.unwrap_err().to_string().contains("new"));
+        let err = parse(&format!("{FULL}new = \"#000000\"\n")).unwrap_err();
+        assert!(err.to_string().contains("new"));
     }
 
     #[test]
     fn invalid_colour_is_an_error() {
-        let err = parse("accent = \"blue\"\nselection = \"#000000\"").unwrap_err();
+        let err = parse(&FULL.replace("#8caaee", "blue")).unwrap_err();
         assert!(err.to_string().contains("blue"));
     }
 

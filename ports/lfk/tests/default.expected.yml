@@ -1,0 +1,19 @@
+# Cluster defaults
+appearance:
+  icons: nerdfont # patched font
+theme:
+  primary: '#8caaee' # my red
+  bar_bg: '#414559'
+  base: '#303446'
+  border: '#51576d'
+  dimmed: '#737994'
+  error: '#e78284'
+  purple: '#ca9ee6'
+  secondary: '#a6d189'
+  selected_bg: '#8caaee'
+  selected_fg: '#303446'
+  surface: '#292c3c'
+  text: '#c6d0f5'
+  warning: '#e5c890'
+keybindings:
+  logs: "ctrl+l"

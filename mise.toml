@@ -41,6 +41,10 @@ fi
 docker run --rm -it "$@" vimify-sandbox
 """
 
+[tasks.e2e]
+depends = ["sandbox:build"]
+run = "docker run --rm vimify-sandbox sandbox-e2e"
+
 # Opt-in: pulls a ~1GB node image and keeps a cluster running on host Docker.
 [tasks."sandbox:cluster"]
 run = """

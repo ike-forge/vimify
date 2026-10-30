@@ -1,0 +1,8 @@
+# Docker shortcuts
+gui:
+  theme:
+    activeBorderColor:
+      - red
+  wrapMainPanel: false # long logs
+logs:
+  since: 30m

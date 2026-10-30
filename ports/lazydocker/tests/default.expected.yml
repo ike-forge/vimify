@@ -1,0 +1,15 @@
+# Docker shortcuts
+gui:
+  theme:
+    activeBorderColor:
+      - '#8caaee'
+      - bold
+    inactiveBorderColor:
+      - '#51576d'
+    optionsTextColor:
+      - '#8caaee'
+    selectedLineBgColor:
+      - '#414559'
+  wrapMainPanel: false # long logs
+logs:
+  since: 30m
