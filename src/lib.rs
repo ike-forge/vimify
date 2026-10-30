@@ -1,3 +1,4 @@
+pub mod backup;
 pub mod fsx;
 pub mod paths;
 pub mod plan;
