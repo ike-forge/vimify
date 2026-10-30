@@ -35,9 +35,17 @@ pub fn run(
     ports: Vec<Port>,
     exclusions: &[String],
     state: &State,
+    reference_hash: &str,
 ) -> Result<Option<Outcome>> {
     let mut terminal = ratatui::init();
-    let result = event_loop(&mut terminal, dirs, ports, exclusions, state);
+    let result = event_loop(
+        &mut terminal,
+        dirs,
+        ports,
+        exclusions,
+        state,
+        reference_hash,
+    );
     ratatui::restore();
     result
 }
@@ -48,6 +56,7 @@ fn event_loop(
     ports: Vec<Port>,
     exclusions: &[String],
     state: &State,
+    reference_hash: &str,
 ) -> Result<Option<Outcome>> {
     let mut screen = Screen::Scan(ScanScreen::new(dirs.len()));
     let rx = crate::scan::spawn(dirs, ports.clone());
@@ -83,7 +92,7 @@ fn event_loop(
                 if s.handle(key.code) {
                     let selection = s.selection();
                     let confirm = ConfirmScreen {
-                        ops: plan::plan(&selection, &ports, state),
+                        ops: plan::plan(&selection, &ports, state, reference_hash),
                         exclusions: plan::exclusions(exclusions, &selection),
                     };
                     Screen::Confirm(s, confirm)

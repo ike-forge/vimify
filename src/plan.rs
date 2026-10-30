@@ -24,7 +24,7 @@ pub enum Action {
     Create {
         path: PathBuf,
     },
-    /// Applied with an older port version.
+    /// Applied with an older port version or a different reference.
     Update {
         path: PathBuf,
     },
@@ -67,13 +67,17 @@ impl Action {
 }
 
 /// Checkboxes are desired state; diffing against `state` yields the ops.
-pub fn plan(selection: &Selection, ports: &[Port], state: &State) -> Vec<Op> {
+pub fn plan(selection: &Selection, ports: &[Port], state: &State, reference_hash: &str) -> Vec<Op> {
     let selected = selection.selected.iter().filter_map(|tool| {
         let port = ports.iter().find(|p| &p.name == tool)?;
         let action = match (state.tools.get(tool), &port.target) {
-            (Some(a), _) if a.port_version != port.version => Action::Update {
-                path: a.path.clone(),
-            },
+            (Some(a), _)
+                if a.port_version != port.version || a.reference_hash != reference_hash =>
+            {
+                Action::Update {
+                    path: a.path.clone(),
+                }
+            }
             (Some(a), _) => Action::Current {
                 path: a.path.clone(),
             },
@@ -122,6 +126,8 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
 
+    const REF: &str = "ref";
+
     fn port(name: &str, version: &str, paths: Option<Vec<String>>) -> Port {
         Port {
             name: name.into(),
@@ -149,6 +155,9 @@ mod tests {
             Applied {
                 port_version: version.into(),
                 path: path.into(),
+                backup: None,
+                reference_hash: REF.into(),
+                file_hash: "file".into(),
             },
         );
         state
@@ -169,7 +178,7 @@ mod tests {
             port("b", "1", Some(vec![missing.to_str().unwrap().into()])),
         ];
 
-        let ops = plan(&selection(&["a", "b"], &[]), &ports, &State::default());
+        let ops = plan(&selection(&["a", "b"], &[]), &ports, &State::default(), REF);
 
         assert_eq!(
             actions(ops),
@@ -195,6 +204,7 @@ mod tests {
             &selection(&["a"], &[]),
             &[port("a", "1", Some(paths))],
             &State::default(),
+            REF,
         );
 
         assert_eq!(ops[0].action, Action::Apply { path: second });
@@ -206,6 +216,7 @@ mod tests {
             &selection(&["a"], &[]),
             &[port("a", "1", None)],
             &State::default(),
+            REF,
         );
         assert_eq!(ops[0].action, Action::Unsupported);
     }
@@ -215,11 +226,22 @@ mod tests {
         let ports = [port("a", "2", None)];
         let sel = selection(&["a"], &[]);
 
-        let same = plan(&sel, &ports, &applied("a", "2", "/c"));
-        let older = plan(&sel, &ports, &applied("a", "1", "/c"));
+        let same = plan(&sel, &ports, &applied("a", "2", "/c"), REF);
+        let older = plan(&sel, &ports, &applied("a", "1", "/c"), REF);
 
         assert_eq!(same[0].action, Action::Current { path: "/c".into() });
         assert_eq!(older[0].action, Action::Update { path: "/c".into() });
+    }
+
+    #[test]
+    fn changed_reference_updates_applied_tool() {
+        let ops = plan(
+            &selection(&["a"], &[]),
+            &[port("a", "1", None)],
+            &applied("a", "1", "/c"),
+            "other",
+        );
+        assert_eq!(ops[0].action, Action::Update { path: "/c".into() });
     }
 
     #[test]
@@ -229,6 +251,7 @@ mod tests {
             &selection(&[], &["a", "b"]),
             &ports,
             &applied("a", "1", "/c"),
+            REF,
         );
         assert_eq!(
             actions(ops),

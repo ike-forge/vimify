@@ -1,15 +1,18 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
 use anyhow::{Context, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use toml_edit::{Array, DocumentMut, value};
 
-use crate::{fsx, paths};
+use crate::{fsx, paths, state};
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 pub struct Reference {
+    pub theme: Option<String>,
+    pub keys: BTreeMap<String, String>,
     pub scan: Scan,
     /// Ports the user unchecked; they start unchecked on later runs.
     pub exclusions: Vec<String>,
@@ -19,6 +22,24 @@ pub struct Reference {
 #[serde(default)]
 pub struct Scan {
     pub extra_paths: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct Hashed<'a> {
+    theme: &'a Option<String>,
+    keys: &'a BTreeMap<String, String>,
+}
+
+impl Reference {
+    /// Only what reaches tool configs: vimify rewrites `exclusions` in this same file,
+    /// so hashing the file would re-apply every tool after each selection change.
+    pub fn hash(&self) -> Result<String> {
+        let text = toml::to_string(&Hashed {
+            theme: &self.theme,
+            keys: &self.keys,
+        })?;
+        Ok(state::hash(text.as_bytes()))
+    }
 }
 
 fn path() -> Option<PathBuf> {
@@ -71,6 +92,36 @@ mod tests {
 
     fn strings(v: &[&str]) -> Vec<String> {
         v.iter().map(|s| s.to_string()).collect()
+    }
+
+    fn hash(text: &str) -> String {
+        toml::from_str::<Reference>(text).unwrap().hash().unwrap()
+    }
+
+    #[test]
+    fn hash_ignores_everything_but_theme_and_keys() {
+        let base = "theme = \"a\"\n[keys]\ndown = \"j\"\n";
+        let noisy = "theme = \"a\"\nexclusions = [\"btop\"]\n[keys]\ndown = \"j\"\n[scan]\nextra_paths = [\"~/bin\"]\n";
+        assert_eq!(hash(base), hash(noisy));
+    }
+
+    #[test]
+    fn hash_ignores_key_order() {
+        let one = "[keys]\ndown = \"j\"\nup = \"k\"\n";
+        let other = "[keys]\nup = \"k\"\ndown = \"j\"\n";
+        assert_eq!(hash(one), hash(other));
+    }
+
+    #[test]
+    fn hash_changes_with_theme_or_keys() {
+        let base = hash("theme = \"a\"\n[keys]\ndown = \"j\"\n");
+        assert_ne!(base, hash("theme = \"b\"\n[keys]\ndown = \"j\"\n"));
+        assert_ne!(base, hash("theme = \"a\"\n[keys]\ndown = \"n\"\n"));
+    }
+
+    #[test]
+    fn empty_reference_hashes() {
+        assert_eq!(hash(""), hash("exclusions = []\n"));
     }
 
     #[test]

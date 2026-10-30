@@ -7,7 +7,8 @@ fn main() -> Result<()> {
     let ports = port::embedded()?;
     let extra = reference.scan.extra_paths.iter().map(String::as_str);
     let dirs = scan::resolve_dirs(scan::DEFAULT_DIRS.iter().copied().chain(extra));
-    let Some(outcome) = ui::run(dirs, ports, &reference.exclusions, &state)? else {
+    let hash = reference.hash()?;
+    let Some(outcome) = ui::run(dirs, ports, &reference.exclusions, &state, &hash)? else {
         return Ok(());
     };
     reference::save_exclusions(&outcome.exclusions)?;

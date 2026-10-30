@@ -134,14 +134,17 @@ trait Editor {
   An existing file is never overwritten, whoever created it.
 - State keeps the backup from the first apply as the revert target, so revert
   restores the pre-vimify file however many re-applies happened since.
-- Creating a missing file needs no backup.
+- Creating a missing file needs no backup. State records none, and `edit` revert
+  deletes the file.
 - Writes are atomic (temp file + rename), through symlinks.
 - State lives in `~/.local/state/vimify/state.toml`, per tool: port version,
   target path, backup path, hash of the reference used, hash of the file after
   apply.
+- The reference hash covers `theme` and `keys` only. `exclusions` live in the same
+  file and change on every selection, so they must not trigger a re-apply.
 - Hash mismatch = user edited the file after apply. Status shows `modified`;
-  `edit` revert then asks before restoring the backup, since it drops those
-  edits. `block`/`include` reverts are unaffected.
+  `edit` revert then asks before restoring the backup or deleting the file, since
+  it drops those edits. `block`/`include` reverts are unaffected.
 
 ## Crate layout
 
