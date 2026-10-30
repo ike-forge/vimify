@@ -159,7 +159,8 @@ src/
   plan.rs       desired state × state → ops
   render.rs     port + reference → values / template text
   edit/         Editor impls: toml, yaml, json, lines
-  apply.rs      backup, strategies, atomic write, revert
+  backup.rs     copy to first free .bak name
+  apply.rs      strategies, atomic write, revert
   state.rs      applied-state store
   ui/           ratatui screens: scan, select, confirm, result
 ```
