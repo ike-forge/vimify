@@ -144,15 +144,17 @@ trait Editor {
   the output is identical, or revert would delete the user's file.
 - Order is backup, state, write. A crash before the write leaves state pointing
   at a real backup; a failed write rolls state back.
+- Revert backs up the current file too, then restores the first backup, and
+  removes state last. A lost backup fails the revert and changes nothing.
 - Writes are atomic (temp file + rename), through symlinks.
 - State lives in `~/.local/state/vimify/state.toml`, per tool: port version,
   target path, backup path, hash of the reference used, hash of the file after
   apply.
 - The reference hash covers `theme` and `keys` only. `exclusions` live in the same
   file and change on every selection, so they must not trigger a re-apply.
-- Hash mismatch = user edited the file after apply. Status shows `modified`;
-  `edit` revert then asks before restoring the backup or deleting the file, since
-  it drops those edits. `block`/`include` reverts are unaffected.
+- Hash mismatch = user edited the file after apply. Status shows `modified`; the
+  confirm screen then warns that `edit` revert drops those edits from the file. A
+  copy stays in the new backup. `block`/`include` reverts are unaffected.
 
 ## Crate layout
 

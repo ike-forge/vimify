@@ -18,6 +18,10 @@ pub struct ConfirmScreen {
     pub exclusions: Vec<String>,
 }
 
+fn is_modified(action: &Action) -> bool {
+    matches!(action, Action::Revert { modified: true, .. })
+}
+
 impl ConfirmScreen {
     pub fn handle(&self, key: KeyCode) -> Option<Choice> {
         match key {
@@ -38,15 +42,22 @@ impl ConfirmScreen {
         .margin(1)
         .areas(frame.area());
 
-        let warning_text = if self.ops.iter().any(|op| op.action.writes()) {
-            Line::from(
-                "⚠ Config for these tools will be overridden. A backup is written next to each file (.bak)."
+        let mut warning_text = if self.ops.iter().any(|op| op.action.writes()) {
+            vec![Line::from(
+                "⚠ Config for these tools will be overridden. Each existing file is backed up next to itself first."
                     .yellow()
                     .bold(),
-            )
+            )]
         } else {
-            Line::from("Nothing to apply.".dim())
+            vec![Line::from("Nothing to apply.".dim())]
         };
+        if self.ops.iter().any(|op| is_modified(&op.action)) {
+            warning_text.push(Line::from(
+                "⚠ Reverting drops edits made since apply. A copy stays in the new backup."
+                    .red()
+                    .bold(),
+            ));
+        }
         let excluded = if self.exclusions.is_empty() {
             "none".to_owned()
         } else {
@@ -80,11 +91,15 @@ impl ConfirmScreen {
                 Some(path) => Span::from(paths::display(path)).dim(),
                 None => Span::from("not supported yet").dim(),
             };
-            ListItem::new(Line::from(vec![
+            let mut spans = vec![
                 Span::styled(format!("{:12}", op.action.label()), style),
                 Span::from(format!("{:width$}  ", op.tool)),
                 detail,
-            ]))
+            ];
+            if is_modified(&op.action) {
+                spans.push(Span::from("  edited since apply").red());
+            }
+            ListItem::new(Line::from(spans))
         }))
     }
 }

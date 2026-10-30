@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::{fs, io};
 
-use anyhow::{Context as _, Result, anyhow};
+use anyhow::{Context as _, Result};
 
 use crate::palette::Palette;
 use crate::plan::{Action, Op};
@@ -37,8 +37,7 @@ pub fn execute<'a>(
                 Action::Apply { path } | Action::Create { path } | Action::Update { path } => {
                     apply_tool(&op.tool, path, cx, state, persist)
                 }
-                // TODO: restore the backup, or delete a file vimify created.
-                Action::Revert { .. } => Err(anyhow!("revert is not implemented yet")),
+                Action::Revert { path, .. } => revert_tool(&op.tool, path, state, persist),
                 Action::Current { .. } | Action::Unsupported => Ok(Vec::new()),
             };
             Report { op, result }
@@ -116,6 +115,52 @@ fn apply_tool(
     Ok(warnings)
 }
 
+/// Restores the first backup, or deletes a file vimify created. The current file is
+/// backed up first, so edits made after apply survive.
+fn revert_tool(
+    tool: &str,
+    path: &Path,
+    state: &mut State,
+    persist: &mut dyn FnMut(&State) -> Result<()>,
+) -> Result<Vec<String>> {
+    let applied = state
+        .tools
+        .get(tool)
+        .with_context(|| format!("{tool} is not applied"))?;
+    // Read before anything changes: a lost backup must leave the file alone.
+    let original = match &applied.backup {
+        Some(backup) => {
+            let text = fs::read_to_string(backup)
+                .with_context(|| format!("backup {}", backup.display()))?;
+            let meta =
+                fs::metadata(backup).with_context(|| format!("backup {}", backup.display()))?;
+            Some((text, meta.permissions()))
+        }
+        None => None,
+    };
+    if path.exists() {
+        backup::backup(path)?;
+    }
+    match original {
+        Some((text, permissions)) => {
+            fsx::write_atomic(path, &text).with_context(|| format!("{}", path.display()))?;
+            fs::set_permissions(path, permissions)
+                .with_context(|| format!("{}", path.display()))?;
+        }
+        None => match fs::remove_file(path) {
+            Err(e) if e.kind() != io::ErrorKind::NotFound => {
+                return Err(e).with_context(|| format!("{}", path.display()));
+            }
+            _ => {}
+        },
+    }
+    // State last: after a crash the tool still counts as applied, and a retry restores
+    // the same file.
+    state.tools.remove(tool);
+    persist(state)?;
+    Ok(Vec::new())
+}
+
 fn read(path: &Path) -> Result<Option<String>> {
     match fs::read_to_string(path) {
         Ok(text) => Ok(Some(text)),
@@ -128,6 +173,7 @@ fn read(path: &Path) -> Result<Option<String>> {
 mod tests {
     use super::*;
     use crate::{palette, port};
+    use anyhow::anyhow;
     use std::os::unix::fs::{PermissionsExt, symlink};
     use std::path::PathBuf;
     use tempfile::TempDir;
@@ -382,17 +428,154 @@ mod tests {
         assert!(good.exists());
     }
 
+    fn revert(path: &Path) -> Action {
+        Action::Revert {
+            path: path.to_owned(),
+            modified: false,
+        }
+    }
+
     #[test]
-    fn revert_is_reported_as_not_done() {
+    fn revert_restores_the_original_and_forgets_the_tool() {
+        let dir = TempDir::new().unwrap();
+        let path = config(&dir, "# mine\nb: 1\n");
+        let mut fx = Fixture::new();
+        fx.run(Action::Apply { path: path.clone() }, "ref").unwrap();
+
+        fx.run(revert(&path), "ref").unwrap();
+
+        assert_eq!(fs::read_to_string(&path).unwrap(), "# mine\nb: 1\n");
+        assert!(fx.state.tools.is_empty());
+        assert!(bak(&path, ".bak").exists());
+    }
+
+    #[test]
+    fn revert_after_update_reaches_the_pre_vimify_file() {
         let dir = TempDir::new().unwrap();
         let path = config(&dir, "b: 1\n");
         let mut fx = Fixture::new();
+        fx.run(Action::Apply { path: path.clone() }, "ref").unwrap();
+        fx.reference.keys.insert("down".into(), "n".into());
+        fx.run(Action::Update { path: path.clone() }, "new")
+            .unwrap();
 
-        assert!(
-            fx.run(Action::Revert { path: path.clone() }, "ref")
-                .is_err()
+        fx.run(revert(&path), "new").unwrap();
+
+        assert_eq!(fs::read_to_string(&path).unwrap(), "b: 1\n");
+    }
+
+    #[test]
+    fn revert_keeps_later_edits_in_a_backup() {
+        let dir = TempDir::new().unwrap();
+        let path = config(&dir, "b: 1\n");
+        let mut fx = Fixture::new();
+        fx.run(Action::Apply { path: path.clone() }, "ref").unwrap();
+        fs::write(&path, "edited: true\n").unwrap();
+
+        fx.run(revert(&path), "ref").unwrap();
+
+        assert_eq!(fs::read_to_string(&path).unwrap(), "b: 1\n");
+        assert_eq!(
+            fs::read_to_string(bak(&path, ".bak.1")).unwrap(),
+            "edited: true\n"
         );
-        assert_eq!(fs::read_to_string(path).unwrap(), "b: 1\n");
+    }
+
+    #[test]
+    fn revert_deletes_a_created_file_and_keeps_a_copy() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("config.yml");
+        let mut fx = Fixture::new();
+        fx.run(Action::Create { path: path.clone() }, "ref")
+            .unwrap();
+
+        fx.run(revert(&path), "ref").unwrap();
+
+        assert!(!path.exists());
+        assert_eq!(
+            fs::read_to_string(bak(&path, ".bak")).unwrap(),
+            "a:\n  down: j\n"
+        );
+        assert!(fx.state.tools.is_empty());
+    }
+
+    #[test]
+    fn revert_of_a_created_file_already_gone_just_forgets_it() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("config.yml");
+        let mut fx = Fixture::new();
+        fx.run(Action::Create { path: path.clone() }, "ref")
+            .unwrap();
+        fs::remove_file(&path).unwrap();
+
+        fx.run(revert(&path), "ref").unwrap();
+
+        assert!(fx.state.tools.is_empty());
+        assert!(!bak(&path, ".bak").exists());
+    }
+
+    #[test]
+    fn revert_recreates_a_deleted_file_with_its_mode() {
+        let dir = TempDir::new().unwrap();
+        let path = config(&dir, "b: 1\n");
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o640)).unwrap();
+        let mut fx = Fixture::new();
+        fx.run(Action::Apply { path: path.clone() }, "ref").unwrap();
+        fs::remove_file(&path).unwrap();
+
+        fx.run(revert(&path), "ref").unwrap();
+
+        assert_eq!(fs::read_to_string(&path).unwrap(), "b: 1\n");
+        let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o640);
+    }
+
+    #[test]
+    fn revert_writes_through_a_symlink() {
+        let dir = TempDir::new().unwrap();
+        let real = dir.path().join("real.yml");
+        let link = dir.path().join("link.yml");
+        fs::write(&real, "b: 1\n").unwrap();
+        symlink(&real, &link).unwrap();
+        let mut fx = Fixture::new();
+        fx.run(Action::Apply { path: link.clone() }, "ref").unwrap();
+
+        fx.run(revert(&link), "ref").unwrap();
+
+        assert!(link.symlink_metadata().unwrap().file_type().is_symlink());
+        assert_eq!(fs::read_to_string(&real).unwrap(), "b: 1\n");
+    }
+
+    #[test]
+    fn lost_backup_leaves_file_and_state_alone() {
+        let dir = TempDir::new().unwrap();
+        let path = config(&dir, "b: 1\n");
+        let mut fx = Fixture::new();
+        fx.run(Action::Apply { path: path.clone() }, "ref").unwrap();
+        let applied = fs::read_to_string(&path).unwrap();
+        fs::remove_file(bak(&path, ".bak")).unwrap();
+
+        assert!(fx.run(revert(&path), "ref").is_err());
+
+        assert_eq!(fs::read_to_string(&path).unwrap(), applied);
+        assert!(fx.state.tools.contains_key("t"));
+        assert!(!bak(&path, ".bak").exists());
+    }
+
+    #[test]
+    fn state_is_saved_after_the_file_is_restored() {
+        let dir = TempDir::new().unwrap();
+        let path = config(&dir, "b: 1\n");
+        let mut fx = Fixture::new();
+        fx.run(Action::Apply { path: path.clone() }, "ref").unwrap();
+        let probe = path.clone();
+
+        fx.run_with(revert(&path), "ref", &mut |state| {
+            assert_eq!(fs::read_to_string(&probe).unwrap(), "b: 1\n");
+            assert!(state.tools.is_empty());
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]

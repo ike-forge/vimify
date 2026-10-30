@@ -1,7 +1,8 @@
 use std::path::{Path, PathBuf};
+use std::{fs, io};
 
 use crate::port::Port;
-use crate::state::State;
+use crate::state::{self, Applied, State};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Selection {
@@ -30,6 +31,8 @@ pub enum Action {
     },
     Revert {
         path: PathBuf,
+        /// The user edited the file after apply; the confirm screen warns.
+        modified: bool,
     },
     Current {
         path: PathBuf,
@@ -55,7 +58,7 @@ impl Action {
             Action::Apply { path }
             | Action::Create { path }
             | Action::Update { path }
-            | Action::Revert { path }
+            | Action::Revert { path, .. }
             | Action::Current { path } => Some(path),
             Action::Unsupported => None,
         }
@@ -99,10 +102,19 @@ pub fn plan(selection: &Selection, ports: &[Port], state: &State, reference_hash
             tool: tool.clone(),
             action: Action::Revert {
                 path: applied.path.clone(),
+                modified: is_modified(applied),
             },
         })
     });
     selected.chain(reverted).collect()
+}
+
+/// A missing file has no edits to lose. An unreadable one might, so it counts.
+fn is_modified(applied: &Applied) -> bool {
+    match fs::read(&applied.path) {
+        Ok(bytes) => state::hash(&bytes) != applied.file_hash,
+        Err(e) => e.kind() != io::ErrorKind::NotFound,
+    }
 }
 
 /// Exclusions for tools not detected this run are kept.
@@ -123,9 +135,7 @@ mod tests {
     use super::*;
     use crate::actions::Notation;
     use crate::port::{Format, Strategy, Target};
-    use crate::state::Applied;
     use std::collections::BTreeMap;
-    use std::fs;
     use tempfile::TempDir;
 
     const REF: &str = "ref";
@@ -282,8 +292,34 @@ mod tests {
         );
         assert_eq!(
             actions(ops),
-            [("a".into(), Action::Revert { path: "/c".into() })]
+            [(
+                "a".into(),
+                Action::Revert {
+                    path: "/c".into(),
+                    modified: false,
+                }
+            )]
         );
+    }
+
+    #[test]
+    fn revert_is_modified_when_the_file_hash_differs() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("config.yml");
+        fs::write(&path, "applied").unwrap();
+        let mut state = applied("a", "1", path.to_str().unwrap());
+        state.tools.get_mut("a").unwrap().file_hash = state::hash(b"applied");
+        let sel = selection(&[], &["a"]);
+        let ports = [port("a", "1", None)];
+
+        let clean = plan(&sel, &ports, &state, REF);
+        fs::write(&path, "edited").unwrap();
+        let edited = plan(&sel, &ports, &state, REF);
+
+        let modified =
+            |ops: &[Op]| matches!(ops[0].action, Action::Revert { modified, .. } if modified);
+        assert!(!modified(&clean));
+        assert!(modified(&edited));
     }
 
     #[test]
