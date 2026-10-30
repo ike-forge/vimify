@@ -14,6 +14,8 @@ Read `vision.md`, `stack.md` and `architecture.md` before changing behaviour.
 - Never overwrite or delete a user file without a backup (`architecture.md`,
   Backups and state).
 - Lint and tests must pass before a commit. Commit only when asked.
+- Commit on the checked-out branch, `master` included. The user creates a branch
+  or worktree when they want one.
 
 ## Style
 
