@@ -12,11 +12,12 @@ paths = [
   "~/Library/Application Support/lazygit/config.yml",
 ]
 
+# The -alt slots: the primary ones hold the arrow keys, which must keep working.
 [keys]
-"keybinding.universal.prevItem" = "up"
-"keybinding.universal.nextItem" = "down"
-"keybinding.universal.prevBlock" = "left"
-"keybinding.universal.nextBlock" = "right"
+"keybinding.universal.prevItem-alt" = "up"
+"keybinding.universal.nextItem-alt" = "down"
+"keybinding.universal.prevBlock-alt" = "left"
+"keybinding.universal.nextBlock-alt" = "right"
 
 [theme]
 "gui.theme.activeBorderColor" = ["{accent}", "bold"]

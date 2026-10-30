@@ -34,7 +34,7 @@ pub enum Action {
     Current {
         path: PathBuf,
     },
-    /// Port has no target yet.
+    /// Port has no editor or mappings yet.
     Unsupported,
 }
 
@@ -81,12 +81,12 @@ pub fn plan(selection: &Selection, ports: &[Port], state: &State, reference_hash
             (Some(a), _) => Action::Current {
                 path: a.path.clone(),
             },
-            (None, Some(target)) => match target.resolve() {
+            (None, Some(target)) if port.writable() => match target.resolve() {
                 Some((path, true)) => Action::Apply { path },
                 Some((path, false)) => Action::Create { path },
                 None => Action::Unsupported,
             },
-            (None, None) => Action::Unsupported,
+            (None, _) => Action::Unsupported,
         };
         Some(Op {
             tool: tool.clone(),
@@ -121,8 +121,10 @@ pub fn exclusions(previous: &[String], selection: &Selection) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::port::Target;
+    use crate::actions::Notation;
+    use crate::port::{Format, Strategy, Target};
     use crate::state::Applied;
+    use std::collections::BTreeMap;
     use std::fs;
     use tempfile::TempDir;
 
@@ -133,7 +135,14 @@ mod tests {
             name: name.into(),
             version: version.into(),
             binaries: vec![name.into()],
-            target: paths.map(|paths| Target { paths }),
+            target: paths.map(|paths| Target {
+                format: Format::Yaml,
+                strategy: Strategy::Edit,
+                key_notation: Some(Notation::Angle),
+                paths,
+            }),
+            keys: BTreeMap::from([("a.b".into(), "down".into())]),
+            theme: BTreeMap::new(),
         }
     }
 
@@ -219,6 +228,24 @@ mod tests {
             REF,
         );
         assert_eq!(ops[0].action, Action::Unsupported);
+    }
+
+    #[test]
+    fn port_vimify_cannot_write_is_unsupported() {
+        let mut unmapped = port("a", "1", Some(vec!["/c".into()]));
+        unmapped.keys.clear();
+        let mut no_editor = port("b", "1", Some(vec!["/c".into()]));
+        no_editor.target.as_mut().unwrap().format = Format::Toml;
+
+        let ops = plan(
+            &selection(&["a", "b"], &[]),
+            &[unmapped, no_editor],
+            &State::default(),
+            REF,
+        );
+
+        assert_eq!(ops[0].action, Action::Unsupported);
+        assert_eq!(ops[1].action, Action::Unsupported);
     }
 
     #[test]

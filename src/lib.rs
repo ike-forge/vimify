@@ -1,9 +1,14 @@
+pub mod actions;
+pub mod apply;
 pub mod backup;
+pub mod edit;
 pub mod fsx;
+pub mod palette;
 pub mod paths;
 pub mod plan;
 pub mod port;
 pub mod reference;
+pub mod render;
 pub mod scan;
 pub mod state;
 pub mod ui;

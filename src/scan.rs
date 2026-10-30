@@ -97,6 +97,8 @@ mod tests {
             version: "0".into(),
             binaries: binaries.iter().map(|b| b.to_string()).collect(),
             target: None,
+            keys: Default::default(),
+            theme: Default::default(),
         }
     }
 

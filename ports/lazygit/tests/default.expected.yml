@@ -1,0 +1,25 @@
+# Personal lazygit config
+gui:
+  # Needs a patched terminal font
+  nerdFontsVersion: "3"
+  theme:
+    activeBorderColor:
+      - '#8caaee'
+      - bold
+    lightTheme: false # dark terminal
+    selectedLineBgColor:
+      - '#414559'
+
+git:
+  paging:
+    colorArg: always
+    pager: delta --paging=never
+
+keybinding:
+  universal:
+    quit: q
+    nextItem: n
+    nextBlock-alt: l
+    nextItem-alt: j
+    prevBlock-alt: h
+    prevItem-alt: k

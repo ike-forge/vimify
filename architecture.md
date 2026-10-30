@@ -4,7 +4,7 @@
 
 | Term          | Meaning                                                              |
 | ------------- | -------------------------------------------------------------------- |
-| Reference     | User's `~/.config/vimify/config.toml`: theme, keys, scan paths, exclusions |
+| Reference     | User's `~/.config/vimify/config.toml`: theme, keys, scan paths, exclusions. Unset theme and actions take built-in defaults |
 | Action        | A vimify-defined verb (`down`, `yank`, ...) bound to a key in the reference |
 | Role          | A semantic colour slot (`accent`, `selection`, ...) filled by a palette |
 | Palette       | Role → hex map for one theme (`catppuccin-frappe`). Ships with vimify |
@@ -39,7 +39,11 @@ scan ──▶ select ──▶ plan ──▶ confirm ──▶ execute ──�
 ## Ports
 
 Mappings go from tool setting to vimify action/role, so a port only covers what
-the tool supports. Ports cannot define new actions or roles.
+the tool supports. Ports cannot define new actions or roles. A binding takes a
+slot the tool offers for alternates where it has one, so the tool's own keys
+keep working.
+
+A port with no editor or no mappings yet plans as `unsupported`.
 
 ```
 ports/lazygit/
@@ -64,11 +68,12 @@ paths = [                  # first existing wins; first resolvable is created
   "~/Library/Application Support/lazygit/config.yml",
 ]
 
+# The -alt slots: the primary ones hold the arrow keys, which must keep working.
 [keys]
-"keybinding.universal.prevItem" = "up"
-"keybinding.universal.nextItem" = "down"
-"keybinding.universal.prevBlock" = "left"
-"keybinding.universal.nextBlock" = "right"
+"keybinding.universal.prevItem-alt" = "up"
+"keybinding.universal.nextItem-alt" = "down"
+"keybinding.universal.prevBlock-alt" = "left"
+"keybinding.universal.nextBlock-alt" = "right"
 
 [theme]
 "gui.theme.activeBorderColor" = ["{accent}", "bold"]
@@ -135,7 +140,10 @@ trait Editor {
 - State keeps the backup from the first apply as the revert target, so revert
   restores the pre-vimify file however many re-applies happened since.
 - Creating a missing file needs no backup. State records none, and `edit` revert
-  deletes the file.
+  deletes the file. A first apply over an existing file always backs up, even if
+  the output is identical, or revert would delete the user's file.
+- Order is backup, state, write. A crash before the write leaves state pointing
+  at a real backup; a failed write rolls state back.
 - Writes are atomic (temp file + rename), through symlinks.
 - State lives in `~/.local/state/vimify/state.toml`, per tool: port version,
   target path, backup path, hash of the reference used, hash of the file after

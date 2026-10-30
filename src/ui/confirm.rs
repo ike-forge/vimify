@@ -78,7 +78,7 @@ impl ConfirmScreen {
             };
             let detail = match op.action.path() {
                 Some(path) => Span::from(paths::display(path)).dim(),
-                None => Span::from("no port target yet").dim(),
+                None => Span::from("not supported yet").dim(),
             };
             ListItem::new(Line::from(vec![
                 Span::styled(format!("{:12}", op.action.label()), style),

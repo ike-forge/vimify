@@ -2,16 +2,18 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use toml_edit::{Array, DocumentMut, value};
 
-use crate::{fsx, paths, state};
+use crate::{actions, fsx, paths, state};
 
-#[derive(Debug, Default, Deserialize)]
+const DEFAULT_THEME: &str = "catppuccin-frappe";
+
+#[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct Reference {
-    pub theme: Option<String>,
+    pub theme: String,
     pub keys: BTreeMap<String, String>,
     pub scan: Scan,
     /// Ports the user unchecked; they start unchecked on later runs.
@@ -24,9 +26,28 @@ pub struct Scan {
     pub extra_paths: Vec<String>,
 }
 
+impl Default for Reference {
+    /// A first run has no config and must still have something to apply.
+    fn default() -> Self {
+        Self {
+            theme: DEFAULT_THEME.to_owned(),
+            keys: default_keys(),
+            scan: Scan::default(),
+            exclusions: Vec::new(),
+        }
+    }
+}
+
+fn default_keys() -> BTreeMap<String, String> {
+    actions::DEFAULTS
+        .iter()
+        .map(|(action, key)| ((*action).to_owned(), (*key).to_owned()))
+        .collect()
+}
+
 #[derive(Serialize)]
 struct Hashed<'a> {
-    theme: &'a Option<String>,
+    theme: &'a str,
     keys: &'a BTreeMap<String, String>,
 }
 
@@ -52,9 +73,23 @@ pub fn load() -> Result<Reference> {
         return Ok(Reference::default());
     };
     match read(&path)? {
-        Some(text) => toml::from_str(&text).with_context(|| format!("{}", path.display())),
+        Some(text) => parse(&text).with_context(|| format!("{}", path.display())),
         None => Ok(Reference::default()),
     }
+}
+
+/// A partial `[keys]` rebinds those actions; the rest keep their defaults.
+fn parse(text: &str) -> Result<Reference> {
+    let mut reference: Reference = toml::from_str(text)?;
+    for action in reference.keys.keys() {
+        if !actions::is_action(action) {
+            bail!("unknown action {action}");
+        }
+    }
+    for (action, key) in default_keys() {
+        reference.keys.entry(action).or_insert(key);
+    }
+    Ok(reference)
 }
 
 /// Rewrites only `exclusions`; the rest of the user's file is untouched.
@@ -95,7 +130,27 @@ mod tests {
     }
 
     fn hash(text: &str) -> String {
-        toml::from_str::<Reference>(text).unwrap().hash().unwrap()
+        parse(text).unwrap().hash().unwrap()
+    }
+
+    #[test]
+    fn empty_config_gets_the_defaults() {
+        let reference = parse("").unwrap();
+        assert_eq!(reference.theme, DEFAULT_THEME);
+        assert_eq!(reference.keys["down"], "j");
+    }
+
+    #[test]
+    fn partial_keys_keep_the_other_defaults() {
+        let reference = parse("[keys]\ndown = \"n\"\n").unwrap();
+        assert_eq!(reference.keys["down"], "n");
+        assert_eq!(reference.keys["up"], "k");
+    }
+
+    #[test]
+    fn unknown_action_is_an_error() {
+        let err = parse("[keys]\nflyy = \"f\"\n").unwrap_err();
+        assert!(err.to_string().contains("unknown action flyy"));
     }
 
     #[test]
