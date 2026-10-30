@@ -118,7 +118,7 @@ A key the notation cannot express skips that binding with a warning.
 
 | Strategy  | Writes                                       | Revert                         |
 | --------- | -------------------------------------------- | ------------------------------ |
-| `edit`    | Owned key paths in place, via format editor  | Restore backup                 |
+| `edit`    | Owned key paths in place, via format editor  | Restore owned keys             |
 | `block`   | Region between `# >>> vimify >>>` markers    | Remove block                   |
 | `include` | Own file + one include line in the tool file | Delete own file, remove line   |
 
@@ -144,17 +144,21 @@ trait Editor {
   the output is identical, or revert would delete the user's file.
 - Order is backup, state, write. A crash before the write leaves state pointing
   at a real backup; a failed write rolls state back.
-- Revert backs up the current file too, then restores the first backup, and
-  removes state last. A lost backup fails the revert and changes nothing.
+- Revert backs up the current file too, and removes state last. A lost backup
+  fails the revert and changes nothing.
+- An untouched file (hash match) reverts to the first backup, byte for byte. An
+  edited file reverts key by key: each owned key takes its value from the first
+  backup, or goes away with any parent vimify created. Other edits survive.
 - Writes are atomic (temp file + rename), through symlinks.
 - State lives in `~/.local/state/vimify/state.toml`, per tool: port version,
   target path, backup path, hash of the reference used, hash of the file after
-  apply.
+  apply, format, and each owned key with the value written.
 - The reference hash covers `theme` and `keys` only. `exclusions` live in the same
   file and change on every selection, so they must not trigger a re-apply.
-- Hash mismatch = user edited the file after apply. Status shows `modified`; the
-  confirm screen then warns that `edit` revert drops those edits from the file. A
-  copy stays in the new backup. `block`/`include` reverts are unaffected.
+- An owned key differing from the value written = `modified`. Edits to anything
+  else do not count, nor does a tool rewriting its own config. The tool plans as
+  `update` or `revert`, and the confirm screen lists it as updated manually, to
+  force. `block`/`include` reverts are unaffected.
 
 ## Crate layout
 
@@ -190,5 +194,3 @@ src/
 - Multi-file targets: yazi splits `keymap.toml` and `theme.toml`, and its
   keymaps are arrays of `{ on, run }`, not key paths.
 - RON (gitui `key_bindings.ron`, `theme.ron`): no format-preserving editor.
-- Tools that rewrite their own config (btop on every exit) break the
-  file-hash `modified` check. Compare only owned values instead?

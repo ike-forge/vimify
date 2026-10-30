@@ -6,6 +6,8 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::edit::Value;
+use crate::port::Format;
 use crate::{fsx, paths};
 
 /// What vimify has applied, per port.
@@ -24,14 +26,26 @@ pub struct Applied {
     pub backup: Option<PathBuf>,
     pub reference_hash: String,
     pub file_hash: String,
+    /// Kept here so a tool can be reverted after its port is gone.
+    pub format: Format,
+    /// Dotted setting → value vimify wrote. Telling these from the file's current
+    /// values separates manual edits of owned keys from edits of anything else.
+    pub owned: BTreeMap<String, Value>,
 }
 
 impl State {
     /// A re-apply keeps the first apply's backup: later ones hold vimify's own output,
-    /// and revert must reach the pre-vimify file.
+    /// and revert must reach the pre-vimify file. Keys it no longer writes stay owned,
+    /// or revert would leave them behind.
     pub fn record(&mut self, tool: &str, mut applied: Applied) {
         if let Some(previous) = self.tools.get(tool) {
             applied.backup = previous.backup.clone();
+            for (setting, value) in &previous.owned {
+                applied
+                    .owned
+                    .entry(setting.clone())
+                    .or_insert_with(|| value.clone());
+            }
         }
         self.tools.insert(tool.to_owned(), applied);
     }
@@ -84,6 +98,11 @@ mod tests {
             backup: backup.map(Into::into),
             reference_hash: "ref".into(),
             file_hash: "file".into(),
+            format: Format::Yaml,
+            owned: BTreeMap::from([
+                ("a.b".into(), Value::Str("j".into())),
+                ("a.c".into(), Value::List(vec!["x".into()])),
+            ]),
         }
     }
 
@@ -135,6 +154,21 @@ mod tests {
         state.record("a", applied(Some("/c/config.yml.bak")));
 
         assert_eq!(state.tools["a"].backup, None);
+    }
+
+    #[test]
+    fn reapply_keeps_keys_it_no_longer_writes() {
+        let mut state = State::default();
+        state.record("a", applied(None));
+        let newer = Applied {
+            owned: BTreeMap::from([("a.b".into(), Value::Str("n".into()))]),
+            ..applied(None)
+        };
+
+        state.record("a", newer);
+
+        assert_eq!(state.tools["a"].owned["a.b"], Value::Str("n".into()));
+        assert!(state.tools["a"].owned.contains_key("a.c"));
     }
 
     #[test]

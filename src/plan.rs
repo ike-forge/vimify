@@ -1,6 +1,7 @@
+use std::fs;
 use std::path::{Path, PathBuf};
-use std::{fs, io};
 
+use crate::edit;
 use crate::port::Port;
 use crate::state::{self, Applied, State};
 
@@ -25,14 +26,15 @@ pub enum Action {
     Create {
         path: PathBuf,
     },
-    /// Applied with an older port version or a different reference.
+    /// Applied with an older port version, a different reference, or a key the user
+    /// changed by hand.
     Update {
         path: PathBuf,
+        manual: bool,
     },
     Revert {
         path: PathBuf,
-        /// The user edited the file after apply; the confirm screen warns.
-        modified: bool,
+        manual: bool,
     },
     Current {
         path: PathBuf,
@@ -57,11 +59,19 @@ impl Action {
         match self {
             Action::Apply { path }
             | Action::Create { path }
-            | Action::Update { path }
+            | Action::Update { path, .. }
             | Action::Revert { path, .. }
             | Action::Current { path } => Some(path),
             Action::Unsupported => None,
         }
+    }
+
+    /// The user changed a key vimify owns, and confirming overrides that change.
+    pub fn manual(&self) -> bool {
+        matches!(
+            self,
+            Action::Update { manual: true, .. } | Action::Revert { manual: true, .. }
+        )
     }
 
     pub fn writes(&self) -> bool {
@@ -74,16 +84,19 @@ pub fn plan(selection: &Selection, ports: &[Port], state: &State, reference_hash
     let selected = selection.selected.iter().filter_map(|tool| {
         let port = ports.iter().find(|p| &p.name == tool)?;
         let action = match (state.tools.get(tool), &port.target) {
-            (Some(a), _)
-                if a.port_version != port.version || a.reference_hash != reference_hash =>
-            {
-                Action::Update {
-                    path: a.path.clone(),
+            (Some(a), _) => {
+                let manual = edited_by_hand(a);
+                if manual || a.port_version != port.version || a.reference_hash != reference_hash {
+                    Action::Update {
+                        path: a.path.clone(),
+                        manual,
+                    }
+                } else {
+                    Action::Current {
+                        path: a.path.clone(),
+                    }
                 }
             }
-            (Some(a), _) => Action::Current {
-                path: a.path.clone(),
-            },
             (None, Some(target)) if port.writable() => match target.resolve() {
                 Some((path, true)) => Action::Apply { path },
                 Some((path, false)) => Action::Create { path },
@@ -102,19 +115,29 @@ pub fn plan(selection: &Selection, ports: &[Port], state: &State, reference_hash
             tool: tool.clone(),
             action: Action::Revert {
                 path: applied.path.clone(),
-                modified: is_modified(applied),
+                manual: edited_by_hand(applied),
             },
         })
     });
     selected.chain(reverted).collect()
 }
 
-/// A missing file has no edits to lose. An unreadable one might, so it counts.
-fn is_modified(applied: &Applied) -> bool {
-    match fs::read(&applied.path) {
-        Ok(bytes) => state::hash(&bytes) != applied.file_hash,
-        Err(e) => e.kind() != io::ErrorKind::NotFound,
+/// Whether an owned key differs from what vimify wrote. Edits to anything else do not
+/// count, nor does a tool rewriting its own config. A file vimify cannot read counts.
+fn edited_by_hand(applied: &Applied) -> bool {
+    let Ok(text) = fs::read_to_string(&applied.path) else {
+        return true;
+    };
+    if state::hash(text.as_bytes()) == applied.file_hash {
+        return false;
     }
+    let Ok(editor) = edit::open(applied.format, &text) else {
+        return true;
+    };
+    applied.owned.iter().any(|(setting, value)| {
+        let path: Vec<&str> = setting.split('.').collect();
+        editor.get(&path).as_ref() != Some(value)
+    })
 }
 
 /// Exclusions for tools not detected this run are kept.
@@ -134,6 +157,7 @@ pub fn exclusions(previous: &[String], selection: &Selection) -> Vec<String> {
 mod tests {
     use super::*;
     use crate::actions::Notation;
+    use crate::edit::Value;
     use crate::port::{Format, Strategy, Target};
     use std::collections::BTreeMap;
     use tempfile::TempDir;
@@ -167,19 +191,26 @@ mod tests {
         }
     }
 
-    fn applied(tool: &str, version: &str, path: &str) -> State {
+    const CONFIG: &str = "a:\n  b: j\nc: 1\n";
+
+    /// `tool` applied at `version`, with `CONFIG` on disk as vimify wrote it.
+    fn applied(dir: &TempDir, tool: &str, version: &str) -> (State, PathBuf) {
+        let path = dir.path().join("config.yml");
+        fs::write(&path, CONFIG).unwrap();
         let mut state = State::default();
         state.tools.insert(
             tool.into(),
             Applied {
                 port_version: version.into(),
-                path: path.into(),
+                path: path.clone(),
                 backup: None,
                 reference_hash: REF.into(),
-                file_hash: "file".into(),
+                file_hash: state::hash(CONFIG.as_bytes()),
+                format: Format::Yaml,
+                owned: BTreeMap::from([("a.b".into(), Value::Str("j".into()))]),
             },
         );
-        state
+        (state, path)
     }
 
     fn actions(ops: Vec<Op>) -> Vec<(String, Action)> {
@@ -258,68 +289,103 @@ mod tests {
         assert_eq!(ops[1].action, Action::Unsupported);
     }
 
+    fn update(path: &Path, manual: bool) -> Action {
+        Action::Update {
+            path: path.to_owned(),
+            manual,
+        }
+    }
+
+    fn revert(path: &Path, manual: bool) -> Action {
+        Action::Revert {
+            path: path.to_owned(),
+            manual,
+        }
+    }
+
+    fn one(tool_selected: bool, state: &State, reference: &str) -> Action {
+        let names: &[&str] = &["a"];
+        let sel = if tool_selected {
+            selection(names, &[])
+        } else {
+            selection(&[], names)
+        };
+        let mut ops = plan(&sel, &[port("a", "2", None)], state, reference);
+        ops.remove(0).action
+    }
+
     #[test]
     fn applied_tool_is_current_or_updated() {
-        let ports = [port("a", "2", None)];
-        let sel = selection(&["a"], &[]);
+        let dir = TempDir::new().unwrap();
+        let (same, path) = applied(&dir, "a", "2");
+        let (older, _) = applied(&dir, "a", "1");
 
-        let same = plan(&sel, &ports, &applied("a", "2", "/c"), REF);
-        let older = plan(&sel, &ports, &applied("a", "1", "/c"), REF);
-
-        assert_eq!(same[0].action, Action::Current { path: "/c".into() });
-        assert_eq!(older[0].action, Action::Update { path: "/c".into() });
+        assert_eq!(
+            one(true, &same, REF),
+            Action::Current { path: path.clone() }
+        );
+        assert_eq!(one(true, &older, REF), update(&path, false));
     }
 
     #[test]
     fn changed_reference_updates_applied_tool() {
-        let ops = plan(
-            &selection(&["a"], &[]),
-            &[port("a", "1", None)],
-            &applied("a", "1", "/c"),
-            "other",
+        let dir = TempDir::new().unwrap();
+        let (state, path) = applied(&dir, "a", "2");
+        assert_eq!(one(true, &state, "other"), update(&path, false));
+    }
+
+    #[test]
+    fn edit_of_an_unowned_key_is_not_manual() {
+        let dir = TempDir::new().unwrap();
+        let (state, path) = applied(&dir, "a", "2");
+        fs::write(&path, "a:\n  b: j\nc: 2 # mine\n").unwrap();
+
+        assert_eq!(
+            one(true, &state, REF),
+            Action::Current { path: path.clone() }
         );
-        assert_eq!(ops[0].action, Action::Update { path: "/c".into() });
+        assert_eq!(one(false, &state, REF), revert(&path, false));
+    }
+
+    #[test]
+    fn edit_of_an_owned_key_is_manual() {
+        let dir = TempDir::new().unwrap();
+        let (state, path) = applied(&dir, "a", "2");
+        fs::write(&path, "a:\n  b: x\nc: 1\n").unwrap();
+
+        assert_eq!(one(true, &state, REF), update(&path, true));
+        assert_eq!(one(false, &state, REF), revert(&path, true));
+    }
+
+    #[test]
+    fn removing_an_owned_key_is_manual() {
+        let dir = TempDir::new().unwrap();
+        let (state, path) = applied(&dir, "a", "2");
+        fs::write(&path, "c: 1\n").unwrap();
+
+        assert_eq!(one(true, &state, REF), update(&path, true));
+    }
+
+    #[test]
+    fn deleted_or_broken_file_is_manual() {
+        let dir = TempDir::new().unwrap();
+        let (state, path) = applied(&dir, "a", "2");
+
+        fs::write(&path, "- not a mapping\n").unwrap();
+        assert_eq!(one(true, &state, REF), update(&path, true));
+        fs::remove_file(&path).unwrap();
+        assert_eq!(one(true, &state, REF), update(&path, true));
     }
 
     #[test]
     fn excluded_tool_is_reverted_only_if_applied() {
-        let ports = [port("a", "1", None), port("b", "1", None)];
-        let ops = plan(
-            &selection(&[], &["a", "b"]),
-            &ports,
-            &applied("a", "1", "/c"),
-            REF,
-        );
-        assert_eq!(
-            actions(ops),
-            [(
-                "a".into(),
-                Action::Revert {
-                    path: "/c".into(),
-                    modified: false,
-                }
-            )]
-        );
-    }
-
-    #[test]
-    fn revert_is_modified_when_the_file_hash_differs() {
         let dir = TempDir::new().unwrap();
-        let path = dir.path().join("config.yml");
-        fs::write(&path, "applied").unwrap();
-        let mut state = applied("a", "1", path.to_str().unwrap());
-        state.tools.get_mut("a").unwrap().file_hash = state::hash(b"applied");
-        let sel = selection(&[], &["a"]);
-        let ports = [port("a", "1", None)];
+        let (state, path) = applied(&dir, "a", "1");
+        let ports = [port("a", "1", None), port("b", "1", None)];
 
-        let clean = plan(&sel, &ports, &state, REF);
-        fs::write(&path, "edited").unwrap();
-        let edited = plan(&sel, &ports, &state, REF);
+        let ops = plan(&selection(&[], &["a", "b"]), &ports, &state, REF);
 
-        let modified =
-            |ops: &[Op]| matches!(ops[0].action, Action::Revert { modified, .. } if modified);
-        assert!(!modified(&clean));
-        assert!(modified(&edited));
+        assert_eq!(actions(ops), [("a".into(), revert(&path, false))]);
     }
 
     #[test]

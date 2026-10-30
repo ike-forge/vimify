@@ -18,10 +18,6 @@ pub struct ConfirmScreen {
     pub exclusions: Vec<String>,
 }
 
-fn is_modified(action: &Action) -> bool {
-    matches!(action, Action::Revert { modified: true, .. })
-}
-
 impl ConfirmScreen {
     pub fn handle(&self, key: KeyCode) -> Option<Choice> {
         match key {
@@ -51,9 +47,9 @@ impl ConfirmScreen {
         } else {
             vec![Line::from("Nothing to apply.".dim())]
         };
-        if self.ops.iter().any(|op| is_modified(&op.action)) {
+        if self.ops.iter().any(|op| op.action.manual()) {
             warning_text.push(Line::from(
-                "⚠ Reverting drops edits made since apply. A copy stays in the new backup."
+                "⚠ Shortcuts or theme were changed by hand. Confirming overrides those changes; a copy stays in the backup."
                     .red()
                     .bold(),
             ));
@@ -96,8 +92,9 @@ impl ConfirmScreen {
                 Span::from(format!("{:width$}  ", op.tool)),
                 detail,
             ];
-            if is_modified(&op.action) {
-                spans.push(Span::from("  edited since apply").red());
+            if op.action.manual() {
+                let force = format!("  updated manually, force {}", op.action.label());
+                spans.push(Span::from(force).red());
             }
             ListItem::new(Line::from(spans))
         }))

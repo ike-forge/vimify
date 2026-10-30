@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use anyhow::{Context, Result, anyhow, bail};
-use yaml_edit::{Document, Mapping, YamlValue};
+use yaml_edit::{Document, Mapping, YamlNode, YamlValue};
 
 use super::{Editor, Value};
 
@@ -40,8 +40,30 @@ impl Editor for YamlEditor {
         set_in(&root, path, &value).with_context(|| path.join("."))
     }
 
+    fn get(&self, path: &[&str]) -> Option<Value> {
+        let (last, parents) = path.split_last()?;
+        let mut mapping = self.doc.as_mapping()?;
+        for key in parents {
+            mapping = mapping.get_mapping(*key)?;
+        }
+        mapping.get(*last).as_ref().map(from_yaml)
+    }
+
+    fn restore(&mut self, path: &[&str], original: &str) -> Result<()> {
+        let original = Self::parse(original)?;
+        let root = self.doc.as_mapping().context("no top-level mapping")?;
+        restore_in(&root, original.doc.as_mapping().as_ref(), path);
+        Ok(())
+    }
+
     fn render(&self) -> String {
-        format!("{}{}", self.prefix, self.doc)
+        let text = self.doc.to_string();
+        // An emptied root prints as `{}`, which the file never held.
+        let body = match self.doc.as_mapping() {
+            Some(root) if root.is_empty() => text.strip_suffix("{}\n").unwrap_or(&text),
+            _ => &text,
+        };
+        format!("{}{body}", self.prefix)
     }
 }
 
@@ -72,6 +94,44 @@ fn set_in(mapping: &Mapping, path: &[&str], value: &Value) -> Result<()> {
             // Not vimify's value to replace: `Mapping::set` would silently drop it.
             None => bail!("{key} is not a mapping"),
         },
+    }
+}
+
+/// A parent the user replaced or removed is left as it is.
+fn restore_in(current: &Mapping, original: Option<&Mapping>, path: &[&str]) {
+    let [key, rest @ ..] = path else {
+        return;
+    };
+    if !rest.is_empty() {
+        let Some(child) = current.get_mapping(*key) else {
+            return;
+        };
+        let original_child = original.and_then(|m| m.get_mapping(*key));
+        restore_in(&child, original_child.as_ref(), rest);
+        if !child.is_empty() {
+            return;
+        }
+    }
+    match original.and_then(|m| m.get(*key)) {
+        Some(node) => current.set(*key, node),
+        None => {
+            current.remove(*key);
+        }
+    }
+}
+
+fn from_yaml(node: &YamlNode) -> Value {
+    if let Some(sequence) = node.as_sequence() {
+        return Value::List(sequence.values().map(|item| scalar(&item)).collect());
+    }
+    Value::Str(scalar(node))
+}
+
+/// Anything else is kept as text, which can only compare unequal to what vimify wrote.
+fn scalar(node: &YamlNode) -> String {
+    match node.as_scalar() {
+        Some(s) => s.as_string(),
+        None => format!("{node:?}"),
     }
 }
 
@@ -181,6 +241,94 @@ mod tests {
     #[test]
     fn top_level_sequence_is_refused() {
         assert!(YamlEditor::parse("- a\n").is_err());
+    }
+
+    fn restore(text: &str, path: &[&str], original: &str) -> String {
+        let mut editor = YamlEditor::parse(text).unwrap();
+        editor.restore(path, original).unwrap();
+        editor.render()
+    }
+
+    fn get(text: &str, path: &[&str]) -> Option<Value> {
+        YamlEditor::parse(text).unwrap().get(path)
+    }
+
+    #[test]
+    fn get_reads_written_values_however_they_are_quoted() {
+        let text = "a:\n  b: \"j\"\n  c: '#8caaee'\n  d: [x, y]\n";
+        assert_eq!(get(text, &["a", "b"]), Some(str("j")));
+        assert_eq!(get(text, &["a", "c"]), Some(str("#8caaee")));
+        assert_eq!(get(text, &["a", "d"]), Some(list(&["x", "y"])));
+    }
+
+    #[test]
+    fn get_of_an_absent_path_is_none() {
+        assert_eq!(get("a: 1\n", &["b"]), None);
+        assert_eq!(get("a: 1\n", &["a", "b"]), None);
+    }
+
+    #[test]
+    fn get_of_a_mapping_differs_from_any_written_value() {
+        let value = get("a:\n  b: 1\n", &["a"]).unwrap();
+        assert_ne!(value, str(""));
+        assert_ne!(value, list(&[]));
+    }
+
+    #[test]
+    fn restore_brings_back_the_original_with_type_and_comments() {
+        let original = "a:\n  n: 5 # five\n  s:\n    - red # r\n  m:\n    p: 1\n";
+        let text = "# top\na:\n  n: x\n  s:\n    - blue\n  m: y\n  mine: 1 # keep\n";
+
+        let out = ["n", "s", "m"].iter().fold(text.to_owned(), |text, key| {
+            restore(&text, &["a", key], original)
+        });
+
+        assert_eq!(
+            out,
+            "# top\na:\n  n: 5\n  s:\n    - red # r\n  m:\n    p: 1\n  mine: 1 # keep\n"
+        );
+    }
+
+    #[test]
+    fn restore_removes_a_key_the_original_lacks() {
+        let out = restore("a:\n  b: 1\n  c: 2 # keep\n", &["a", "b"], "a:\n  c: 0\n");
+        assert_eq!(out, "a:\n  c: 2 # keep\n");
+    }
+
+    #[test]
+    fn restore_prunes_parents_the_original_lacks() {
+        let out = restore(
+            "x: 1\na:\n  b:\n    c: 1\ny: 2\n",
+            &["a", "b", "c"],
+            "x: 0\n",
+        );
+        assert_eq!(out, "x: 1\ny: 2\n");
+    }
+
+    #[test]
+    fn restore_keeps_a_parent_the_user_added_to() {
+        let out = restore("a:\n  b: 1\n  mine: 2\n", &["a", "b"], "");
+        assert_eq!(out, "a:\n  mine: 2\n");
+    }
+
+    #[test]
+    fn restore_brings_back_a_null_parent() {
+        let out = restore("a:\n  b: 1\nc: 2\n", &["a", "b"], "a:\nc: 2\n");
+        assert_eq!(out, "a:\nc: 2\n");
+    }
+
+    #[test]
+    fn restore_leaves_a_replaced_parent_alone() {
+        assert_eq!(
+            restore("a: mine\n", &["a", "b"], "a:\n  b: 1\n"),
+            "a: mine\n"
+        );
+    }
+
+    #[test]
+    fn restore_of_everything_leaves_no_braces() {
+        assert_eq!(restore("a: 1\n", &["a"], ""), "");
+        assert_eq!(restore("# mine\na: 1\n", &["a"], ""), "# mine\n");
     }
 
     #[test]

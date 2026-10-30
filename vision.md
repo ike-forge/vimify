@@ -31,8 +31,8 @@ the terminal and independent of the distro or window manager.
 Per tool, or for all supported tools at once:
 
 - **install** — apply the reference config.
-- **revert / uninstall** — restore the backup and drop the tool from the
-  selection.
+- **revert / uninstall** — take vimify's keys back out, keeping any other edits,
+  and drop the tool from the selection.
 
 ## Reference config
 
