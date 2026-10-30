@@ -7,9 +7,11 @@ edition = "2024"
 anyhow = "1"
 include_dir = "0.7"
 ratatui = "0.30"
+semver = "1.0.28"
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"
 tempfile = "3"
 toml = "1.1.8"
 toml_edit = "0.25"
+ureq = { version = "3.5.0", default-features = false, features = ["rustls", "gzip", "platform-verifier"] }
 yaml-edit = "0.3.5"

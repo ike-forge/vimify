@@ -59,10 +59,9 @@ user also customises them outside vimify.
 Each supported tool has a mapping that translates the reference config into that
 tool's config format and location.
 
-- **v1:** mappings ship embedded in vimify as a versioned database.
-- **Later:** mappings live in independent, community-maintained repos, one per
-  tool, in the style of Catppuccin ports. Adding a tool should not require a
-  vimify release.
+- Ports live in this repository and are added by PR. vimify fetches them at
+  startup, so a new port does not need a vimify release, and ships a copy for
+  offline use.
 
 ## Ideas
 

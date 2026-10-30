@@ -21,8 +21,10 @@ scan ──▶ select ──▶ plan ──▶ confirm ──▶ execute ──�
 1. **scan:** walk scan dirs, match binaries against port `binaries`. One progress
    tick per dir. Runs on a worker thread, events over a channel to the UI loop.
 2. **select:** `apply to all`, `apply to none`, then detected tools with status
-   (`applied`, `modified`, `update`). Initially checked: every detected tool not
-   in `exclusions`.
+   (`applied`, `modified`, `update`). Initially checked: every supported tool not
+   in `exclusions`. Unsupported tools are greyed out at the bottom: they cannot be
+   checked and never enter `exclusions`, so they are offered once a port covers
+   them. `i` opens a modal with what the port covers.
 3. **plan:** checkboxes are desired state, diffed against state:
 
    | Checked | Applied | Op                         |
@@ -43,7 +45,8 @@ the tool supports. Ports cannot define new actions or roles. A binding takes a
 slot the tool offers for alternates where it has one, so the tool's own keys
 keep working.
 
-A port with no editor or no mappings yet plans as `unsupported`.
+A port with no editor or no mappings yet is `unsupported`. `notes` in `port.toml`
+explain what a port leaves out, and appear in the info modal.
 
 ```
 ports/lazygit/
@@ -100,11 +103,33 @@ selection_background {selection}
 
 ### Sources and versioning
 
-- v1: `ports/` is embedded at build time (`include_dir`). The DB version is the
-  vimify version; each port also has its own `version`.
-- Later: `~/.config/vimify/ports/<tool>/` overrides embedded ports, then
-  fetching from community repos. Same format, so no loader changes.
+- `ports/` is embedded at build time (`include_dir`), so vimify works offline.
+- CI publishes every port as one file to the `ports-bundle` branch. A committed
+  bundle would conflict on every port PR. Startup fetches it with an ETag and a
+  2 second timeout, and caches it in `~/.cache/vimify`. For every tool the bundle
+  covers, it replaces the embedded ports. `VIMIFY_PORTS_URL` overrides the URL;
+  empty turns updates off.
+- A bundle port this build cannot read is skipped, so a newer `schema` does not
+  break an older vimify.
 - `schema` gates the port format. vimify rejects ports with an unknown schema.
+
+A port covers a range of tool versions: `versions = ">=0.40, <0.60"`, default all.
+Add a new port only when a tool's config changes, as `ports/<tool>/<dir>/port.toml`.
+The scan runs `version_args` (default `--version`) and takes the first dotted number.
+
+| Tool version                        | Port    | Shown       |
+| ----------------------------------- | ------- | ----------- |
+| In a range                          | That one | `supported` |
+| Outside, same major as nearest port | Nearest | `supported` |
+| Outside, another major              | Nearest | `untested`  |
+| Unknown                             | Newest  | `untested`  |
+
+Ports always lag releases, so being outside a range is not worth a warning by itself.
+A tool crossing into another port plans as `update`, because the port version differs.
+
+Ports arrive over the network, so `port.toml` is checked on load: `paths` stay in
+config locations and `version_args` are plain words. Neither replaces review: a
+config can run commands, and that is only visible by reading the port.
 
 ### Key notation
 

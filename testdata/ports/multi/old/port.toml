@@ -1,0 +1,4 @@
+schema = 1
+version = "1"
+binaries = ["multi"]
+versions = "<1.0"

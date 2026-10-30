@@ -18,6 +18,7 @@ pub fn is_action(name: &str) -> bool {
 #[serde(rename_all = "lowercase")]
 pub enum Notation {
     Angle,
+    Tcell,
 }
 
 impl Notation {
@@ -25,6 +26,7 @@ impl Notation {
     pub fn convert(self, key: &str) -> Option<String> {
         match self {
             Notation::Angle => angle(key),
+            Notation::Tcell => tcell(key),
         }
     }
 }
@@ -53,12 +55,90 @@ fn angle(key: &str) -> Option<String> {
     Some(format!("<{name}>"))
 }
 
+/// A name tcell lacks stops lazysql from starting, so this only emits names from
+/// tcell's `KeyNames`.
+fn tcell(key: &str) -> Option<String> {
+    if key.chars().count() == 1 {
+        return Some(key.to_owned());
+    }
+    let inner = key.strip_prefix('<')?.strip_suffix('>')?.to_lowercase();
+    if let Some(("c", ch)) = inner.split_once('-') {
+        let mut chars = ch.chars();
+        let (Some(ch), None) = (chars.next(), chars.next()) else {
+            return None;
+        };
+        return match ch {
+            // These bytes are named after the keys that send them.
+            'h' => Some("Backspace".to_owned()),
+            'i' => Some("Tab".to_owned()),
+            'm' => Some("Enter".to_owned()),
+            'a'..='z' => Some(format!("Ctrl-{}", ch.to_ascii_uppercase())),
+            _ => None,
+        };
+    }
+    let name = match inner.as_str() {
+        "cr" | "enter" | "return" => "Enter",
+        "bs" | "backspace" => "Backspace2",
+        "del" | "delete" => "Delete",
+        "esc" => "Esc",
+        "tab" => "Tab",
+        "space" => " ",
+        "up" => "Up",
+        "down" => "Down",
+        "left" => "Left",
+        "right" => "Right",
+        "home" => "Home",
+        "end" => "End",
+        "insert" => "Insert",
+        "pageup" | "pgup" => "PgUp",
+        "pagedown" | "pgdown" | "pgdn" => "PgDn",
+        _ => return None,
+    };
+    Some(name.to_owned())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn angle(key: &str) -> Option<String> {
         Notation::Angle.convert(key)
+    }
+
+    fn tcell(key: &str) -> Option<String> {
+        Notation::Tcell.convert(key)
+    }
+
+    #[test]
+    fn tcell_keeps_single_chars() {
+        assert_eq!(tcell("j").as_deref(), Some("j"));
+        assert_eq!(tcell("G").as_deref(), Some("G"));
+    }
+
+    #[test]
+    fn tcell_uppercases_ctrl() {
+        assert_eq!(tcell("<C-u>").as_deref(), Some("Ctrl-U"));
+    }
+
+    #[test]
+    fn tcell_has_no_ctrl_h_i_or_m() {
+        assert_eq!(tcell("<C-h>").as_deref(), Some("Backspace"));
+        assert_eq!(tcell("<C-i>").as_deref(), Some("Tab"));
+        assert_eq!(tcell("<C-m>").as_deref(), Some("Enter"));
+    }
+
+    #[test]
+    fn tcell_maps_vim_names() {
+        assert_eq!(tcell("<CR>").as_deref(), Some("Enter"));
+        assert_eq!(tcell("<PageDown>").as_deref(), Some("PgDn"));
+        assert_eq!(tcell("<Space>").as_deref(), Some(" "));
+    }
+
+    #[test]
+    fn tcell_refuses_what_it_cannot_spell() {
+        assert_eq!(tcell("<A-x>"), None);
+        assert_eq!(tcell("gg"), None);
+        assert_eq!(tcell("<C-1>"), None);
     }
 
     #[test]

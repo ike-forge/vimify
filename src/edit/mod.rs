@@ -1,3 +1,4 @@
+mod toml;
 mod yaml;
 
 use anyhow::{Result, bail};
@@ -26,6 +27,7 @@ pub trait Editor {
 pub fn open(format: Format, text: &str) -> Result<Box<dyn Editor>> {
     match format {
         Format::Yaml => Ok(Box::new(yaml::YamlEditor::parse(text)?)),
-        Format::Toml | Format::Json | Format::Lines => bail!("no editor for {format:?}"),
+        Format::Toml => Ok(Box::new(toml::TomlEditor::parse(text)?)),
+        Format::Json | Format::Lines => bail!("no editor for {format:?}"),
     }
 }

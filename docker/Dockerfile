@@ -18,7 +18,7 @@ ARG TARGETARCH
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-       bat btop ca-certificates curl git less sqlite3 tmux unzip \
+       bat btop ca-certificates curl git less python3 sqlite3 tmux unzip \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=extra-ca . /usr/local/share/ca-certificates/
 RUN update-ca-certificates
@@ -48,6 +48,7 @@ COPY --from=build /vimify /usr/local/bin/vimify
 
 COPY docker/entrypoint.sh /usr/local/bin/sandbox-entrypoint
 COPY docker/e2e.sh /usr/local/bin/sandbox-e2e
+COPY ports/lazygit/port.toml /tmp/lazygit.port.toml
 RUN useradd -m -s /bin/bash dev
 USER dev
 WORKDIR /home/dev

@@ -744,11 +744,11 @@ mod tests {
     fn ports_match_their_golden_files() {
         let reference = Reference::default();
         let palette = palette::load("catppuccin-frappe").unwrap();
-        let ports = port::embedded().unwrap();
         let cases = port::golden_cases();
         assert!(!cases.is_empty());
-        for (name, input, expected) in cases {
-            let port = ports.iter().find(|p| p.name == name).unwrap();
+        for (port, input, expected) in cases {
+            let port = &port;
+            let name = &port.name;
             let out = transform(port, &reference, &palette, input).unwrap();
             assert_eq!(out.text, expected, "port {name}");
             assert!(out.warnings.is_empty(), "port {name}: {:?}", out.warnings);

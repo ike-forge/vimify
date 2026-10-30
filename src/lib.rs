@@ -8,6 +8,7 @@ pub mod paths;
 pub mod plan;
 pub mod port;
 pub mod reference;
+pub mod registry;
 pub mod render;
 pub mod scan;
 pub mod state;

@@ -1,9 +1,10 @@
 schema = 1
 version = "0.1.0"
 binaries = ["lfk"]
+versions = ">=0.19"
 
-# Theme only: navigation is fixed, and `delete` would move resource deletion from D
-# to a lowercase d.
+notes = "Theme only: lfk's navigation is fixed, and vimify leaves resource deletion on D."
+
 [target]
 format = "yaml"
 strategy = "edit"

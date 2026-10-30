@@ -11,6 +11,7 @@ use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, Ke
 
 use crate::plan::{self, Op};
 use crate::port::Port;
+use crate::registry;
 use crate::state::State;
 use confirm::{Choice, ConfirmScreen};
 use scan::ScanScreen;
@@ -20,6 +21,8 @@ use select::SelectScreen;
 pub struct Outcome {
     pub ops: Vec<Op>,
     pub exclusions: Vec<String>,
+    /// The port each detected tool resolved to, after refreshing.
+    pub ports: Vec<Port>,
 }
 
 enum Screen {
@@ -53,20 +56,24 @@ pub fn run(
 fn event_loop(
     terminal: &mut DefaultTerminal,
     dirs: Vec<PathBuf>,
-    ports: Vec<Port>,
+    mut ports: Vec<Port>,
     exclusions: &[String],
     state: &State,
     reference_hash: &str,
 ) -> Result<Option<Outcome>> {
     let mut screen = Screen::Scan(ScanScreen::new(dirs.len()));
-    let rx = crate::scan::spawn(dirs, ports.clone());
+    let rx = crate::scan::spawn(dirs, ports.clone(), registry::refresh);
     loop {
         if let Screen::Scan(scan) = &mut screen {
             while let Ok(ev) = rx.try_recv() {
+                if let crate::scan::Event::Ports(fresh) = &ev {
+                    ports = fresh.clone();
+                }
                 scan.update(ev);
             }
             if scan.finished() && !scan.found().is_empty() {
-                screen = Screen::Select(SelectScreen::new(scan.found().to_vec(), exclusions));
+                screen =
+                    Screen::Select(SelectScreen::new(scan.found().to_vec(), exclusions, &ports));
             }
         }
         terminal.draw(|f| match &screen {
@@ -84,7 +91,10 @@ fn event_loop(
             continue;
         }
         let esc_quits = !matches!(screen, Screen::Confirm(..));
-        if is_quit(&key) || (esc_quits && key.code == KeyCode::Esc) {
+        // `q` and Esc close the modal first.
+        let modal = matches!(&screen, Screen::Select(s) if s.modal_open());
+        let quit = key.code == KeyCode::Char('q') || (esc_quits && key.code == KeyCode::Esc);
+        if is_ctrl_c(&key) || (quit && !modal) {
             return Ok(None);
         }
         screen = match screen {
@@ -92,7 +102,7 @@ fn event_loop(
                 if s.handle(key.code) {
                     let selection = s.selection();
                     let confirm = ConfirmScreen {
-                        ops: plan::plan(&selection, &ports, state, reference_hash),
+                        ops: plan::plan(&selection, &s.ports(), state, reference_hash),
                         exclusions: plan::exclusions(exclusions, &selection),
                     };
                     Screen::Confirm(s, confirm)
@@ -105,6 +115,7 @@ fn event_loop(
                     return Ok(Some(Outcome {
                         ops: c.ops,
                         exclusions: c.exclusions,
+                        ports: s.ports(),
                     }));
                 }
                 Some(Choice::Back) => Screen::Select(s),
@@ -115,7 +126,6 @@ fn event_loop(
     }
 }
 
-fn is_quit(key: &KeyEvent) -> bool {
-    let ctrl_c = key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL);
-    ctrl_c || key.code == KeyCode::Char('q')
+fn is_ctrl_c(key: &KeyEvent) -> bool {
+    key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL)
 }

@@ -1,0 +1,15 @@
+# Work databases
+[application]
+DefaultPageSize = 300 # fits my screen
+
+[[database]]
+Name = 'demo'
+Provider = 'sqlite3'
+URL = '/home/dev/demo.db'
+
+[keymap.Table]
+Copy = "c" # my own binding
+Refresh = "r"
+
+[theme.Colors]
+Title = "red"

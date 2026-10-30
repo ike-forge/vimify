@@ -1,8 +1,10 @@
 schema = 1
 version = "0.1.0"
 binaries = ["lazydocker"]
+versions = ">=0.25"
 
-# Theme only: lazydocker has no configurable keybindings.
+notes = "Theme only: lazydocker has no configurable keybindings."
+
 [target]
 format = "yaml"
 strategy = "edit"

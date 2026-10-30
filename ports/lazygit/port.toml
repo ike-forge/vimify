@@ -1,6 +1,8 @@
 schema = 1
 version = "0.1.0"
 binaries = ["lazygit"]
+versions = ">=0.66"
+notes = "yank and delete are not mapped yet."
 
 [target]
 format = "yaml"

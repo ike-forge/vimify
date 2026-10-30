@@ -14,6 +14,8 @@ pub struct ScanScreen {
     done: usize,
     current: Option<PathBuf>,
     found: Vec<Detection>,
+    /// Until the ports are refreshed, which can take a moment on a slow network.
+    updating: bool,
     finished: bool,
 }
 
@@ -24,6 +26,7 @@ impl ScanScreen {
             done: 0,
             current: None,
             found: Vec::new(),
+            updating: true,
             finished: false,
         }
     }
@@ -34,7 +37,13 @@ impl ScanScreen {
                 self.done = done;
                 self.current = Some(dir);
             }
+            Event::Ports(_) => self.updating = false,
             Event::Found(d) => self.found.push(d),
+            Event::Version { port, version } => {
+                if let Some(d) = self.found.iter_mut().find(|d| d.port == port) {
+                    d.version = Some(version);
+                }
+            }
             Event::Done => self.finished = true,
         }
     }
@@ -69,8 +78,10 @@ impl ScanScreen {
         } else {
             self.done as f64 / self.total as f64
         };
-        let label = if self.finished {
-            format!("{} supported tools found", self.found.len())
+        let label = if self.updating {
+            "Updating ports...".to_owned()
+        } else if self.finished {
+            format!("{} known tools found", self.found.len())
         } else {
             let dir = self
                 .current

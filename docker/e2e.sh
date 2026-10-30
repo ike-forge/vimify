@@ -4,6 +4,8 @@
 set -u
 
 export LANG=C.UTF-8
+# Tests must not depend on GitHub. test_remote_* serve their own bundle.
+export VIMIFY_PORTS_URL=
 
 CFG=~/.config/lazygit/config.yml
 STATE=~/.local/state/vimify/state.toml
@@ -12,6 +14,10 @@ REFERENCE=~/.config/vimify/config.toml
 ACCENT='38;2;140;170;238'
 SELECTION='48;2;65;69;89'
 BORDER='38;2;81;87;109'
+ACCENT_BG='48;2;140;170;238'
+
+LAZYSQL=~/.config/lazysql/config.toml
+cp "$LAZYSQL" /tmp/lazysql.seed
 
 ORIGINAL='# My lazygit setup
 gui:
@@ -54,8 +60,10 @@ close() { tmux -u kill-server 2>/dev/null; }
 
 reset() {
   close
-  rm -rf ~/.config/lazygit ~/.config/lazydocker ~/.config/lfk \
-    ~/.config/vimify ~/.local/state/vimify
+  rm -rf ~/.config/lazygit ~/.config/lazydocker ~/.config/lfk ~/.config/lazysql \
+    ~/.config/vimify ~/.local/state/vimify ~/.cache/vimify
+  mkdir -p ~/.config/lazysql
+  cp /tmp/lazysql.seed "$LAZYSQL"
 }
 
 seed() {
@@ -177,7 +185,7 @@ test_missing_config_is_created() {
   accept
   in_file "$CFG" 'nextItem-alt: j'
   absent "$CFG.bak"
-  not_in_file "$STATE" '^backup'
+  not_in_file "$STATE" "$CFG.bak"
 }
 
 test_unusable_config_fails_without_touching_it() {
@@ -270,14 +278,14 @@ test_lost_backup_refuses_to_revert() {
   in_file "$STATE" 'lazygit'
 }
 
-lazygit_row() {
-  screen -e | grep -an "$SELECTION" | cut -d: -f1 | head -1
+selected_row() {
+  screen -e | grep -an "$row_colour" | cut -d: -f1 | head -1
 }
 
 press() {
   tmux -u send-keys -t app "$1"
   sleep 0.5
-  [ "$(lazygit_row)" = "$2" ] || fail "$1 left the selection on row $(lazygit_row), want $2"
+  [ "$(selected_row)" = "$2" ] || fail "$1 left the selection on row $(selected_row), want $2"
 }
 
 # Keys lazygit does not bind by default, so a pass proves the config was read. The
@@ -297,9 +305,156 @@ test_lazygit_honours_what_vimify_wrote() {
     sleep 1
   fi
   screen -e | grep -aq "$ACCENT" || fail 'accent colour not on screen'
+  row_colour=$SELECTION
   local start
-  start=$(lazygit_row)
+  start=$(selected_row)
   [ -n "$start" ] || fail 'selection colour not on screen'
+  local next=$((start + 1))
+  press m "$next"
+  press k "$start"
+  press Down "$next"
+  press Up "$start"
+  press j "$start"
+}
+
+# The sandbox has tools without a working port: the first of them sits right after the
+# four supported ones.
+test_unsupported_tools_are_greyed_out_and_cannot_be_applied() {
+  reset
+  tmux -u new-session -d -s app -x 150 -y 40 'vimify 2>&1; echo EXIT=$?; sleep 60'
+  wait_for 'apply to all' || return
+  on_screen 'btop .*not supported yet'
+  # Cursor on an unsupported tool, then try to tick it.
+  tmux -u send-keys -t app j j j j j j Space Enter
+  wait_for ' confirm' || return
+  off_screen 'btop'
+  off_screen 'bat'
+  on_screen 'create .*lazygit'
+  close
+}
+
+test_info_modal_shows_what_a_port_covers() {
+  reset
+  tmux -u new-session -d -s app -x 150 -y 40 'vimify 2>&1; echo EXIT=$?; sleep 60'
+  wait_for 'apply to all' || return
+  # lazydocker, the first tool.
+  tmux -u send-keys -t app j j i
+  wait_for 'any key closes' || return
+  on_screen 'Keys *none'
+  on_screen 'Theme *4 settings'
+  on_screen 'no configurable keybindings'
+  # Closes the modal, not vimify.
+  tmux -u send-keys -t app q
+  sleep 0.5
+  off_screen 'any key closes'
+  on_screen 'apply to all'
+  off_screen 'EXIT='
+  close
+}
+
+test_versions_are_detected_and_shown() {
+  reset
+  tmux -u new-session -d -s app -x 150 -y 40 'vimify 2>&1; sleep 60'
+  wait_for 'apply to all' || return
+  on_screen 'lazygit .*0\.66\.1 .*supported'
+  on_screen 'lazysql .*0\.7\.0 .*supported'
+  on_screen 'btop .*1\.3\.2 .*not supported yet'
+  close
+}
+
+# A bundle that moves lazygit to another major, and gives btop a port it lacks.
+serve_bundle() {
+  mkdir -p /tmp/www
+  {
+    echo '[[port]]'
+    echo 'tool = "lazygit"'
+    echo "text = '''"
+    sed 's/^versions = .*/versions = ">=5.0"/' /tmp/lazygit.port.toml
+    echo "'''"
+    echo '[[port]]'
+    echo 'tool = "btop"'
+    echo "text = '''"
+    printf '%s\n' 'schema = 1' 'version = "9"' 'binaries = ["btop"]' 'versions = ">=1.0"' \
+      '[target]' 'format = "yaml"' 'strategy = "edit"' \
+      'paths = ["$XDG_CONFIG_HOME/btop/from-bundle.yml"]' \
+      '[theme]' '"a.b" = "{accent}"'
+    echo "'''"
+  } >/tmp/www/ports.toml
+  (cd /tmp/www && exec python3 -m http.server 8765 --bind 127.0.0.1) >/dev/null 2>&1 &
+  server=$!
+  local tries=50
+  until bash -c '</dev/tcp/127.0.0.1/8765' 2>/dev/null; do
+    tries=$((tries - 1))
+    [ "$tries" = 0 ] && { fail 'bundle server did not start'; return 1; }
+    sleep 0.1
+  done
+}
+
+stop_bundle() { kill "$server" 2>/dev/null; wait "$server" 2>/dev/null; }
+
+select_screen() {
+  close
+  tmux -u new-session -d -s app -x 150 -y 40 'vimify 2>&1; sleep 60'
+  wait_for 'apply to all'
+}
+
+test_remote_ports_apply_and_keep_working_offline() {
+  reset
+  serve_bundle || return
+  export VIMIFY_PORTS_URL=http://127.0.0.1:8765/ports.toml
+  select_screen || return
+  # lazygit 0.66 against a port for 5.x.
+  on_screen 'lazygit .*0\.66\.1 .*untested'
+  on_screen 'btop .*1\.3\.2 .*supported'
+  close
+  exists ~/.cache/vimify/ports.toml
+
+  stop_bundle
+  select_screen || return
+  on_screen 'btop .*1\.3\.2 .*supported'
+  close
+  export VIMIFY_PORTS_URL=
+}
+
+test_unreachable_bundle_falls_back_to_embedded_ports() {
+  reset
+  export VIMIFY_PORTS_URL=http://127.0.0.1:1/ports.toml
+  select_screen || return
+  on_screen 'lazygit .*supported'
+  on_screen 'btop .*not supported yet'
+  close
+  export VIMIFY_PORTS_URL=
+}
+
+test_lazysql_config_survives_apply_and_revert() {
+  reset
+  apply
+  in_file "$LAZYSQL" "URL = '/home/dev/demo.db'"
+  in_file "$LAZYSQL" 'keymap.Tree'
+  revert
+  cmp -s "$LAZYSQL" /tmp/lazysql.seed || fail 'not byte-identical after revert'
+}
+
+# lazysql refuses to start on a command or key name it does not know, so reaching the
+# tree proves every mapping in the port is valid.
+test_lazysql_honours_what_vimify_wrote() {
+  reset
+  mkdir -p ~/.config/vimify
+  printf '[keys]\ndown = "m"\n' >"$REFERENCE"
+  apply
+  close
+  tmux -u new-session -d -s app -x 150 -y 40 "$TRUECOLOR lazysql --no-telemetry; sleep 60"
+  wait_for 'demo' || return
+  tmux -u send-keys -t app Enter
+  wait_for 'demo_db' || return
+  tmux -u send-keys -t app Enter
+  wait_for 'users' || return
+  sleep 0.5
+  screen -e | grep -aq "$BORDER" || fail 'border colour not on screen'
+  row_colour=$ACCENT_BG
+  local start
+  start=$(selected_row)
+  [ -n "$start" ] || fail 'accent colour not on the selected row'
   local next=$((start + 1))
   press m "$next"
   press k "$start"

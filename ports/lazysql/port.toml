@@ -1,8 +1,44 @@
 schema = 1
 version = "0.1.0"
 binaries = ["lazysql"]
+versions = ">=0.7"
+notes = "left and right are not mapped: H and L switch panes, and h and l move between cells."
 
 [target]
 format = "toml"
 strategy = "edit"
+key_notation = "tcell"
 paths = ["$XDG_CONFIG_HOME/lazysql/config.toml"]
+
+# A binding replaces a command's first key only, which is the vim one: arrows survive.
+# `left` and `right` are unmapped: H and L switch panes, and h and l move table cells.
+[keys]
+"keymap.Tree.MoveDown" = "down"
+"keymap.Tree.MoveUp" = "up"
+"keymap.Sidebar.MoveDown" = "down"
+"keymap.Sidebar.MoveUp" = "up"
+"keymap.Table.Copy" = "yank"
+"keymap.Table.Delete" = "delete"
+"keymap.Sidebar.Copy" = "yank"
+"keymap.QueryPreview.Copy" = "yank"
+"keymap.QueryPreview.Delete" = "delete"
+"keymap.QueryHistory.Copy" = "yank"
+"keymap.QueryHistory.Delete" = "delete"
+"keymap.JSONViewer.Copy" = "yank"
+
+[theme]
+"theme.Colors.PrimitiveBackground" = "{base}"
+"theme.Colors.ContrastBackground" = "{selection}"
+"theme.Colors.MoreContrastBackground" = "{surface}"
+"theme.Colors.Border" = "{border}"
+"theme.Colors.Title" = "{accent}"
+"theme.Colors.Graphics" = "{border}"
+"theme.Colors.PrimaryText" = "{text}"
+"theme.Colors.SecondaryText" = "{accent}"
+"theme.Colors.TertiaryText" = "{warning}"
+"theme.Colors.InverseText" = "{muted}"
+"theme.Colors.ContrastSecondaryText" = "{base}"
+"theme.Colors.Error" = "{error}"
+"theme.Colors.SQLKeyword" = "{special}"
+"theme.Colors.SQLString" = "{success}"
+"theme.Colors.SQLComment" = "{muted}"

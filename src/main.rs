@@ -9,12 +9,12 @@ fn main() -> Result<()> {
     let extra = reference.scan.extra_paths.iter().map(String::as_str);
     let dirs = scan::resolve_dirs(scan::DEFAULT_DIRS.iter().copied().chain(extra));
     let hash = reference.hash()?;
-    let Some(outcome) = ui::run(dirs, ports.clone(), &reference.exclusions, &state, &hash)? else {
+    let Some(outcome) = ui::run(dirs, ports, &reference.exclusions, &state, &hash)? else {
         return Ok(());
     };
     reference::save_exclusions(&outcome.exclusions)?;
     let cx = apply::Context {
-        ports: &ports,
+        ports: &outcome.ports,
         reference: &reference,
         palette: &palette,
         reference_hash: &hash,

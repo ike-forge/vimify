@@ -1,0 +1,50 @@
+# Work databases
+[application]
+DefaultPageSize = 300 # fits my screen
+
+[[database]]
+Name = 'demo'
+Provider = 'sqlite3'
+URL = '/home/dev/demo.db'
+
+[keymap.Table]
+Copy = "y" # my own binding
+Refresh = "r"
+Delete = "d"
+
+[keymap.JSONViewer]
+Copy = "y"
+
+[keymap.QueryHistory]
+Copy = "y"
+Delete = "d"
+
+[keymap.QueryPreview]
+Copy = "y"
+Delete = "d"
+
+[keymap.Sidebar]
+Copy = "y"
+MoveDown = "j"
+MoveUp = "k"
+
+[keymap.Tree]
+MoveDown = "j"
+MoveUp = "k"
+
+[theme.Colors]
+Title = "#8caaee"
+Border = "#51576d"
+ContrastBackground = "#414559"
+ContrastSecondaryText = "#303446"
+Error = "#e78284"
+Graphics = "#51576d"
+InverseText = "#737994"
+MoreContrastBackground = "#292c3c"
+PrimaryText = "#c6d0f5"
+PrimitiveBackground = "#303446"
+SQLComment = "#737994"
+SQLKeyword = "#ca9ee6"
+SQLString = "#a6d189"
+SecondaryText = "#8caaee"
+TertiaryText = "#e5c890"

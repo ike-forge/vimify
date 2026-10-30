@@ -169,6 +169,8 @@ mod tests {
             name: name.into(),
             version: version.into(),
             binaries: vec![name.into()],
+            versions: semver::VersionReq::STAR,
+            version_args: vec![],
             target: paths.map(|paths| Target {
                 format: Format::Yaml,
                 strategy: Strategy::Edit,
@@ -177,6 +179,7 @@ mod tests {
             }),
             keys: BTreeMap::from([("a.b".into(), "down".into())]),
             theme: BTreeMap::new(),
+            notes: None,
         }
     }
 
@@ -276,7 +279,7 @@ mod tests {
         let mut unmapped = port("a", "1", Some(vec!["/c".into()]));
         unmapped.keys.clear();
         let mut no_editor = port("b", "1", Some(vec!["/c".into()]));
-        no_editor.target.as_mut().unwrap().format = Format::Toml;
+        no_editor.target.as_mut().unwrap().format = Format::Json;
 
         let ops = plan(
             &selection(&["a", "b"], &[]),

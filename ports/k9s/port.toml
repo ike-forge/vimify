@@ -1,6 +1,7 @@
 schema = 1
 version = "0.1.0"
 binaries = ["k9s"]
+version_args = ["version", "-s"]
 
 # Theme is a skin file (skins/<name>.yaml) selected by k9s.ui.skin.
 [target]
