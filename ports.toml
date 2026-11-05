@@ -1,0 +1,394 @@
+[[port]]
+tool = "bat"
+text = """
+schema = 1
+version = "0.1.0"
+# Debian and Ubuntu ship the binary as batcat.
+binaries = ["bat", "batcat"]
+versions = ">=0.25"
+
+notes = "Theme only: bat has no keybindings, and pages through less. Syntax colours follow the terminal's palette: bat ships no Catppuccin theme, and a custom one needs `bat cache --build`."
+
+[[target]]
+format = "lines"
+strategy = "block"
+paths = ["$BAT_CONFIG_PATH", "$XDG_CONFIG_HOME/bat/config"]
+template = '--theme="ansi"'
+"""
+
+[[port]]
+tool = "btop"
+text = """
+schema = 1
+version = "0.1.0"
+binaries = ["btop"]
+versions = ">=1.3"
+
+notes = "Keys are btop's vim mode: h, j, k and l are fixed, so rebinding them has no effect, and yank and delete do not apply."
+
+# `key = value` lines; values are not TOML (`vim_keys = True`). btop rewrites the whole
+# file on exit: values survive, comments and markers do not.
+[[target]]
+format = "lines"
+strategy = "edit"
+paths = ["$XDG_CONFIG_HOME/btop/btop.conf"]
+
+[target.theme]
+color_theme = '"vimify"'
+vim_keys = "True"
+
+[[target]]
+format = "lines"
+strategy = "edit"
+paths = ["$XDG_CONFIG_HOME/btop/themes/vimify.theme"]
+
+[target.theme]
+"theme[main_fg]" = '"{text}"'
+"theme[title]" = '"{text}"'
+"theme[hi_fg]" = '"{accent}"'
+"theme[selected_bg]" = '"{selection}"'
+"theme[selected_fg]" = '"{text}"'
+"theme[inactive_fg]" = '"{muted}"'
+"theme[proc_misc]" = '"{accent}"'
+"theme[cpu_box]" = '"{border}"'
+"theme[mem_box]" = '"{border}"'
+"theme[net_box]" = '"{border}"'
+"theme[proc_box]" = '"{border}"'
+"theme[div_line]" = '"{border}"'
+"theme[temp_start]" = '"{success}"'
+"theme[temp_mid]" = '"{warning}"'
+"theme[temp_end]" = '"{error}"'
+"theme[cpu_start]" = '"{success}"'
+"theme[cpu_mid]" = '"{warning}"'
+"theme[cpu_end]" = '"{error}"'
+"theme[free_start]" = '"{success}"'
+"theme[free_mid]" = '"{warning}"'
+"theme[free_end]" = '"{error}"'
+"theme[cached_start]" = '"{accent}"'
+"theme[cached_mid]" = '"{special}"'
+"theme[cached_end]" = '"{special}"'
+"theme[available_start]" = '"{success}"'
+"theme[available_mid]" = '"{accent}"'
+"theme[available_end]" = '"{accent}"'
+"theme[used_start]" = '"{warning}"'
+"theme[used_mid]" = '"{error}"'
+"theme[used_end]" = '"{error}"'
+"theme[download_start]" = '"{accent}"'
+"theme[download_mid]" = '"{special}"'
+"theme[download_end]" = '"{special}"'
+"theme[upload_start]" = '"{success}"'
+"theme[upload_mid]" = '"{warning}"'
+"theme[upload_end]" = '"{warning}"'
+"""
+
+[[port]]
+tool = "gitui"
+text = """
+schema = 1
+version = "0.1.0"
+binaries = ["gitui"]
+notes = "gitui binds one key per move, so the arrow keys stop moving. up, down, left and right only."
+
+[[target]]
+format = "ron"
+strategy = "edit"
+key_notation = "gitui"
+paths = [
+  "$XDG_CONFIG_HOME/gitui/key_bindings.ron",
+  "~/Library/Application Support/gitui/key_bindings.ron",
+]
+
+[target.keys]
+move_left = "left"
+move_down = "down"
+move_up = "up"
+move_right = "right"
+
+[[target]]
+format = "ron"
+strategy = "edit"
+paths = [
+  "$XDG_CONFIG_HOME/gitui/theme.ron",
+  "~/Library/Application Support/gitui/theme.ron",
+]
+
+[target.theme]
+selection_bg = 'Some("{selection}")'
+selection_fg = 'Some("{text}")'
+command_fg = 'Some("{text}")'
+cmdbar_bg = 'Some("{surface}")'
+disabled_fg = 'Some("{muted}")'
+diff_line_add = 'Some("{success}")'
+diff_line_delete = 'Some("{error}")'
+diff_file_added = 'Some("{success}")'
+diff_file_removed = 'Some("{error}")'
+diff_file_modified = 'Some("{warning}")'
+diff_file_moved = 'Some("{special}")'
+danger_fg = 'Some("{error}")'
+push_gauge_bg = 'Some("{accent}")'
+push_gauge_fg = 'Some("{base}")'
+branch_fg = 'Some("{accent}")'
+"""
+
+[[port]]
+tool = "k9s"
+text = """
+schema = 1
+version = "0.1.0"
+binaries = ["k9s"]
+version_args = ["version", "-s"]
+versions = ">=0.40"
+
+notes = "Theme only: k9s has no navigation keymap, and already takes j and k. A skin set per cluster or context wins over this one."
+
+# A skin is its own file, selected by k9s.ui.skin.
+[[target]]
+format = "yaml"
+strategy = "edit"
+paths = [
+  "$K9S_CONFIG_DIR/config.yaml",
+  "$XDG_CONFIG_HOME/k9s/config.yaml",
+  "~/Library/Application Support/k9s/config.yaml",
+]
+
+[target.theme]
+"k9s.ui.skin" = "vimify"
+
+[[target]]
+format = "yaml"
+strategy = "edit"
+paths = [
+  "$K9S_CONFIG_DIR/skins/vimify.yaml",
+  "$XDG_CONFIG_HOME/k9s/skins/vimify.yaml",
+  "~/Library/Application Support/k9s/skins/vimify.yaml",
+]
+
+[target.theme]
+"k9s.body.fgColor" = "{text}"
+"k9s.body.bgColor" = "default"
+"k9s.body.logoColor" = "{accent}"
+"k9s.prompt.fgColor" = "{text}"
+"k9s.prompt.bgColor" = "default"
+"k9s.prompt.suggestColor" = "{muted}"
+"k9s.info.fgColor" = "{accent}"
+"k9s.info.sectionColor" = "{text}"
+"k9s.frame.border.fgColor" = "{border}"
+"k9s.frame.border.focusColor" = "{accent}"
+"k9s.frame.menu.fgColor" = "{text}"
+"k9s.frame.menu.keyColor" = "{accent}"
+"k9s.frame.menu.numKeyColor" = "{accent}"
+"k9s.frame.crumbs.fgColor" = "{base}"
+"k9s.frame.crumbs.bgColor" = "{accent}"
+"k9s.frame.crumbs.activeColor" = "{special}"
+"k9s.frame.status.newColor" = "{accent}"
+"k9s.frame.status.modifyColor" = "{special}"
+"k9s.frame.status.addColor" = "{success}"
+"k9s.frame.status.errorColor" = "{error}"
+"k9s.frame.status.highlightColor" = "{warning}"
+"k9s.frame.status.killColor" = "{muted}"
+"k9s.frame.status.completedColor" = "{muted}"
+"k9s.frame.title.fgColor" = "{text}"
+"k9s.frame.title.bgColor" = "default"
+"k9s.frame.title.highlightColor" = "{warning}"
+"k9s.frame.title.counterColor" = "{special}"
+"k9s.frame.title.filterColor" = "{accent}"
+"k9s.views.table.fgColor" = "{text}"
+"k9s.views.table.bgColor" = "default"
+"k9s.views.table.cursorFgColor" = "{text}"
+"k9s.views.table.cursorBgColor" = "{selection}"
+"k9s.views.table.header.fgColor" = "{accent}"
+"k9s.views.table.header.bgColor" = "default"
+"k9s.views.table.header.sorterColor" = "{warning}"
+"""
+
+[[port]]
+tool = "lazydocker"
+text = """
+schema = 1
+version = "0.1.0"
+binaries = ["lazydocker"]
+versions = ">=0.25"
+
+notes = "Theme only: lazydocker has no configurable keybindings."
+
+[[target]]
+format = "yaml"
+strategy = "edit"
+paths = [
+  "$CONFIG_DIR/config.yml",
+  "$XDG_CONFIG_HOME/lazydocker/config.yml",
+  "~/Library/Application Support/jesseduffield/lazydocker/config.yml",
+]
+
+[target.theme]
+"gui.theme.activeBorderColor" = ["{accent}", "bold"]
+"gui.theme.inactiveBorderColor" = ["{border}"]
+"gui.theme.selectedLineBgColor" = ["{selection}"]
+"gui.theme.optionsTextColor" = ["{accent}"]
+"""
+
+[[port]]
+tool = "lazygit"
+text = """
+schema = 1
+version = "0.2.0"
+binaries = ["lazygit"]
+versions = ">=0.66"
+notes = "yank covers the file and commit copy keys; delete covers the shared remove key. quit replaces q and ctrl+c: lazygit has one slot for it."
+
+[[target]]
+format = "yaml"
+strategy = "edit"
+key_notation = "angle"
+paths = [
+  "$LG_CONFIG_FILE",
+  "$XDG_CONFIG_HOME/lazygit/config.yml",
+  "~/Library/Application Support/lazygit/config.yml",
+]
+
+# The -alt slots: the primary ones hold the arrow keys, which must keep working.
+[target.keys]
+"keybinding.universal.prevItem-alt" = "up"
+"keybinding.universal.nextItem-alt" = "down"
+"keybinding.universal.prevBlock-alt" = "left"
+"keybinding.universal.nextBlock-alt" = "right"
+"keybinding.universal.remove" = "delete"
+"keybinding.universal.quit" = "quit"
+"keybinding.files.copyFileInfoToClipboard" = "yank"
+"keybinding.commits.copyCommitAttributeToClipboard" = "yank"
+
+[target.theme]
+"gui.theme.activeBorderColor" = ["{accent}", "bold"]
+"gui.theme.inactiveBorderColor" = ["{border}"]
+"gui.theme.searchingActiveBorderColor" = ["{warning}", "bold"]
+"gui.theme.optionsTextColor" = ["{accent}"]
+"gui.theme.selectedLineBgColor" = ["{selection}"]
+"gui.theme.unstagedChangesColor" = ["{error}"]
+"gui.theme.defaultFgColor" = ["{text}"]
+"""
+
+[[port]]
+tool = "lazysql"
+text = """
+schema = 1
+version = "0.1.0"
+binaries = ["lazysql"]
+versions = ">=0.7"
+notes = "left and right are not mapped: H and L switch panes, and h and l move between cells."
+
+[[target]]
+format = "toml"
+strategy = "edit"
+key_notation = "tcell"
+paths = ["$XDG_CONFIG_HOME/lazysql/config.toml"]
+
+# A binding replaces a command's first key only, which is the vim one: arrows survive.
+# `left` and `right` are unmapped: H and L switch panes, and h and l move table cells.
+[target.keys]
+"keymap.Tree.MoveDown" = "down"
+"keymap.Tree.MoveUp" = "up"
+"keymap.Sidebar.MoveDown" = "down"
+"keymap.Sidebar.MoveUp" = "up"
+"keymap.Table.Copy" = "yank"
+"keymap.Table.Delete" = "delete"
+"keymap.Sidebar.Copy" = "yank"
+"keymap.QueryPreview.Copy" = "yank"
+"keymap.QueryPreview.Delete" = "delete"
+"keymap.QueryHistory.Copy" = "yank"
+"keymap.QueryHistory.Delete" = "delete"
+"keymap.JSONViewer.Copy" = "yank"
+
+[target.theme]
+"theme.Colors.PrimitiveBackground" = "{base}"
+"theme.Colors.ContrastBackground" = "{selection}"
+"theme.Colors.MoreContrastBackground" = "{surface}"
+"theme.Colors.Border" = "{border}"
+"theme.Colors.Title" = "{accent}"
+"theme.Colors.Graphics" = "{border}"
+"theme.Colors.PrimaryText" = "{text}"
+"theme.Colors.SecondaryText" = "{accent}"
+"theme.Colors.TertiaryText" = "{warning}"
+"theme.Colors.InverseText" = "{muted}"
+"theme.Colors.ContrastSecondaryText" = "{base}"
+"theme.Colors.Error" = "{error}"
+"theme.Colors.SQLKeyword" = "{special}"
+"theme.Colors.SQLString" = "{success}"
+"theme.Colors.SQLComment" = "{muted}"
+"""
+
+[[port]]
+tool = "lfk"
+text = """
+schema = 1
+version = "0.1.0"
+binaries = ["lfk"]
+versions = ">=0.19"
+
+notes = "Theme only: lfk's navigation is fixed, and vimify leaves resource deletion on D."
+
+[[target]]
+format = "yaml"
+strategy = "edit"
+paths = ["$LFK_CONFIG_DIR/config.yaml", "$XDG_CONFIG_HOME/lfk/config.yaml"]
+
+[target.theme]
+"theme.primary" = "{accent}"
+"theme.secondary" = "{success}"
+"theme.text" = "{text}"
+"theme.selected_fg" = "{base}"
+"theme.selected_bg" = "{accent}"
+"theme.border" = "{border}"
+"theme.dimmed" = "{muted}"
+"theme.error" = "{error}"
+"theme.warning" = "{warning}"
+"theme.purple" = "{special}"
+"theme.base" = "{base}"
+"theme.bar_bg" = "{selection}"
+"theme.surface" = "{surface}"
+"""
+
+[[port]]
+tool = "yazi"
+text = """
+schema = 1
+version = "0.2.0"
+binaries = ["yazi"]
+versions = ">=26.9"
+
+notes = "Keys cover the file list only; the task, preview and input layers keep their own. A keymap written as [[mgr.prepend_keymap]] tables is refused: use the inline array."
+
+# prepend_keymap, not keymap: that replaces yazi's defaults, which must keep working.
+[[target]]
+format = "toml"
+strategy = "edit"
+key_notation = "vim"
+paths = ["$YAZI_CONFIG_HOME/keymap.toml", "$XDG_CONFIG_HOME/yazi/keymap.toml"]
+
+[target.keys]
+"mgr.prepend_keymap[run=arrow prev].on" = "up"
+"mgr.prepend_keymap[run=arrow next].on" = "down"
+"mgr.prepend_keymap[run=leave].on" = "left"
+"mgr.prepend_keymap[run=enter].on" = "right"
+"mgr.prepend_keymap[run=yank].on" = "yank"
+"mgr.prepend_keymap[run=remove].on" = "delete"
+"mgr.prepend_keymap[run=quit].on" = "quit"
+
+[[target]]
+format = "toml"
+strategy = "edit"
+paths = ["$YAZI_CONFIG_HOME/theme.toml", "$XDG_CONFIG_HOME/yazi/theme.toml"]
+
+[target.theme]
+"mgr.cwd.fg" = "{accent}"
+"mgr.border_style.fg" = "{border}"
+"tabs.active.fg" = "{base}"
+"tabs.active.bg" = "{accent}"
+"tabs.inactive.fg" = "{accent}"
+"tabs.inactive.bg" = "{selection}"
+"mode.normal_main.fg" = "{base}"
+"mode.normal_main.bg" = "{accent}"
+"mode.normal_alt.fg" = "{accent}"
+"mode.normal_alt.bg" = "{selection}"
+"indicator.current.fg" = "{text}"
+"indicator.current.bg" = "{selection}"
+"""
