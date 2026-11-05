@@ -1,10 +1,11 @@
 # vimify
 
-> **Status:** under active development. Nothing is released yet; the commands
-> below describe the intended behaviour.
+> **Status:** under active development.
 
 Same vim-style keybindings and same theme across your CLI and TUI tools,
 configured from one file.
+
+![lazygit, k9s, lazydocker and lfk sharing one theme](docs/img/themed.png)
 
 ## What it does
 
@@ -17,7 +18,12 @@ configured from one file.
 
 ## Install
 
-Planned: Homebrew, apt and other package managers.
+```sh
+brew install ike-forge/tap/vimify
+```
+
+Or the shell installer from the latest release. Planned: apt and other package
+managers.
 
 ## Usage
 
@@ -25,8 +31,12 @@ Planned: Homebrew, apt and other package managers.
 vimify            # scan, select tools, apply
 ```
 
+![The tool list after the scan](docs/img/select.png)
+
 From the tool list you can install or revert vimify's config per tool, or for
 all supported tools at once (recommended).
+
+![The confirm screen lists every file before anything is written](docs/img/confirm.png)
 
 > **Warning:** applying vimify overrides keybinding and theme settings in the
 > selected tools' configs. Backups are created, but review the list before
@@ -48,6 +58,7 @@ up = "k"
 right = "l"
 yank = "y"
 delete = "d"
+quit = "q"
 
 [scan]
 extra_paths = ["~/tools/bin"]
@@ -73,3 +84,13 @@ mise run run
 ```
 
 See [stack.md](stack.md) for the full task list.
+
+`mise run screenshots` regenerates `docs/img` from the real tools under a throwaway
+`HOME`. It needs tmux, Pillow and the sandbox kind cluster.
+
+## Releasing
+
+Run the *Prepare release* workflow with a version. It tags `master` once CI is
+green, and the release workflow builds the archives and updates the Homebrew
+formula in `ike-forge/homebrew-tap`. That last step needs a `HOMEBREW_TAP_TOKEN`
+secret with push access to the tap.
