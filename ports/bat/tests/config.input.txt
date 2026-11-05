@@ -1,0 +1,3 @@
+# My bat setup
+--style="numbers"
+--paging=never

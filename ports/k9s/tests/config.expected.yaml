@@ -1,0 +1,6 @@
+k9s:
+  refreshRate: 2 # mine
+  ui:
+    enableMouse: false
+    logoless: true
+    skin: vimify

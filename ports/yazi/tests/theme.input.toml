@@ -1,0 +1,7 @@
+# Mine
+[mgr]
+cwd = { fg = "red" } # mine
+syntect_theme = "x.tmTheme"
+
+[status]
+overall = { bg = "black" }

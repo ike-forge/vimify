@@ -238,7 +238,7 @@ fn info(tool: &Tool) -> Vec<Line<'static>> {
     if tool.untested {
         lines.push(field("Port for", port.versions.to_string()));
     }
-    if let Some((path, _)) = port.target.as_ref().and_then(|t| t.resolve()) {
+    for (path, _) in port.targets.iter().filter_map(|t| t.resolve()) {
         lines.push(field("Config", paths::display(&path)));
     }
     if port.writable() {
@@ -252,7 +252,10 @@ fn info(tool: &Tool) -> Vec<Line<'static>> {
         };
         lines.push(field("Keys", list(bound)));
         lines.push(field("Not mapped", list(unbound)));
-        lines.push(field("Theme", format!("{} settings", port.theme.len())));
+        lines.push(field(
+            "Theme",
+            format!("{} settings", port.theme_settings()),
+        ));
     }
     if let Some(notes) = &port.notes {
         lines.push(Line::default());
@@ -282,7 +285,7 @@ mod tests {
     use super::*;
     use crate::port;
 
-    const SUPPORTED: &str = "schema = 1\nversion = \"1\"\nbinaries = []\n[target]\nformat = \"yaml\"\nstrategy = \"edit\"\nkey_notation = \"angle\"\npaths = [\"~/.config/c/config.yml\"]\n[keys]\na = \"down\"\n[theme]\nb = \"{accent}\"\n";
+    const SUPPORTED: &str = "schema = 1\nversion = \"1\"\nbinaries = []\n[[target]]\nformat = \"yaml\"\nstrategy = \"edit\"\nkey_notation = \"angle\"\npaths = [\"~/.config/c/config.yml\"]\n[target.keys]\na = \"down\"\n[target.theme]\nb = \"{accent}\"\n";
     const UNSUPPORTED: &str = "schema = 1\nversion = \"1\"\nbinaries = []\n";
 
     fn mixed(supported: &[&str], unsupported: &[&str], exclusions: &[&str]) -> SelectScreen {

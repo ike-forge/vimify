@@ -1,0 +1,8 @@
+# Mine
+[mgr]
+prepend_keymap = [
+	{ on = "x", run = "mine", desc = "Mine" },
+]
+
+[tasks]
+prepend_keymap = [{ on = "q", run = "close" }]

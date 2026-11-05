@@ -1,0 +1,48 @@
+k9s:
+  body:
+    bgColor: default
+    fgColor: '#c6d0f5'
+    logoColor: '#8caaee'
+  frame:
+    border:
+      fgColor: '#51576d'
+      focusColor: '#8caaee'
+    crumbs:
+      activeColor: '#ca9ee6'
+      bgColor: '#8caaee'
+      fgColor: '#303446'
+    menu:
+      fgColor: '#c6d0f5'
+      keyColor: '#8caaee'
+      numKeyColor: '#8caaee'
+    status:
+      addColor: '#a6d189'
+      completedColor: '#737994'
+      errorColor: '#e78284'
+      highlightColor: '#e5c890'
+      killColor: '#737994'
+      modifyColor: '#ca9ee6'
+      newColor: '#8caaee'
+    title:
+      bgColor: default
+      counterColor: '#ca9ee6'
+      fgColor: '#c6d0f5'
+      filterColor: '#8caaee'
+      highlightColor: '#e5c890'
+  info:
+    fgColor: '#8caaee'
+    sectionColor: '#c6d0f5'
+  prompt:
+    bgColor: default
+    fgColor: '#c6d0f5'
+    suggestColor: '#737994'
+  views:
+    table:
+      bgColor: default
+      cursorBgColor: '#414559'
+      cursorFgColor: '#c6d0f5'
+      fgColor: '#c6d0f5'
+      header:
+        bgColor: default
+        fgColor: '#8caaee'
+        sorterColor: '#e5c890'

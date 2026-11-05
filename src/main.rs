@@ -22,12 +22,14 @@ fn main() -> Result<()> {
     let reports = apply::execute(&outcome.ops, &cx, &mut state, &mut state::save);
     let mut failed = 0;
     for report in &reports {
-        let path = report
+        let shown: Vec<String> = report
             .op
             .action
-            .path()
-            .map(paths::display)
-            .unwrap_or_default();
+            .paths()
+            .iter()
+            .map(|path| paths::display(path))
+            .collect();
+        let path = shown.join(", ");
         let label = report.op.action.label();
         println!("{label:8} {:12} {path}", report.op.tool);
         match &report.result {

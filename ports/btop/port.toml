@@ -1,10 +1,60 @@
 schema = 1
 version = "0.1.0"
 binaries = ["btop"]
+versions = ">=1.3"
 
-# `key = value` lines; values are not TOML (`vim_keys = True`). btop rewrites
-# the whole file on exit: values survive, comments and markers do not.
-[target]
+notes = "Keys are btop's vim mode: h, j, k and l are fixed, so rebinding them has no effect, and yank and delete do not apply."
+
+# `key = value` lines; values are not TOML (`vim_keys = True`). btop rewrites the whole
+# file on exit: values survive, comments and markers do not.
+[[target]]
 format = "lines"
 strategy = "edit"
 paths = ["$XDG_CONFIG_HOME/btop/btop.conf"]
+
+[target.theme]
+color_theme = '"vimify"'
+vim_keys = "True"
+
+[[target]]
+format = "lines"
+strategy = "edit"
+paths = ["$XDG_CONFIG_HOME/btop/themes/vimify.theme"]
+
+[target.theme]
+"theme[main_fg]" = '"{text}"'
+"theme[title]" = '"{text}"'
+"theme[hi_fg]" = '"{accent}"'
+"theme[selected_bg]" = '"{selection}"'
+"theme[selected_fg]" = '"{text}"'
+"theme[inactive_fg]" = '"{muted}"'
+"theme[proc_misc]" = '"{accent}"'
+"theme[cpu_box]" = '"{border}"'
+"theme[mem_box]" = '"{border}"'
+"theme[net_box]" = '"{border}"'
+"theme[proc_box]" = '"{border}"'
+"theme[div_line]" = '"{border}"'
+"theme[temp_start]" = '"{success}"'
+"theme[temp_mid]" = '"{warning}"'
+"theme[temp_end]" = '"{error}"'
+"theme[cpu_start]" = '"{success}"'
+"theme[cpu_mid]" = '"{warning}"'
+"theme[cpu_end]" = '"{error}"'
+"theme[free_start]" = '"{success}"'
+"theme[free_mid]" = '"{warning}"'
+"theme[free_end]" = '"{error}"'
+"theme[cached_start]" = '"{accent}"'
+"theme[cached_mid]" = '"{special}"'
+"theme[cached_end]" = '"{special}"'
+"theme[available_start]" = '"{success}"'
+"theme[available_mid]" = '"{accent}"'
+"theme[available_end]" = '"{accent}"'
+"theme[used_start]" = '"{warning}"'
+"theme[used_mid]" = '"{error}"'
+"theme[used_end]" = '"{error}"'
+"theme[download_start]" = '"{accent}"'
+"theme[download_mid]" = '"{special}"'
+"theme[download_end]" = '"{special}"'
+"theme[upload_start]" = '"{success}"'
+"theme[upload_mid]" = '"{warning}"'
+"theme[upload_end]" = '"{warning}"'

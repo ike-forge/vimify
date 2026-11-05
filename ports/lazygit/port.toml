@@ -4,7 +4,7 @@ binaries = ["lazygit"]
 versions = ">=0.66"
 notes = "yank and delete are not mapped yet."
 
-[target]
+[[target]]
 format = "yaml"
 strategy = "edit"
 key_notation = "angle"
@@ -15,13 +15,13 @@ paths = [
 ]
 
 # The -alt slots: the primary ones hold the arrow keys, which must keep working.
-[keys]
+[target.keys]
 "keybinding.universal.prevItem-alt" = "up"
 "keybinding.universal.nextItem-alt" = "down"
 "keybinding.universal.prevBlock-alt" = "left"
 "keybinding.universal.nextBlock-alt" = "right"
 
-[theme]
+[target.theme]
 "gui.theme.activeBorderColor" = ["{accent}", "bold"]
 "gui.theme.inactiveBorderColor" = ["{border}"]
 "gui.theme.searchingActiveBorderColor" = ["{warning}", "bold"]

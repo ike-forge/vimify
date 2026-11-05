@@ -1,6 +1,40 @@
 schema = 1
 version = "0.1.0"
 binaries = ["yazi"]
+versions = ">=26.9"
 
-# No [target] yet: yazi splits keymap.toml and theme.toml, and keymaps are
-# arrays of { on, run } rather than key paths. Needs multi-file targets.
+notes = "Keys cover the file list only; the task, preview and input layers keep their own. A keymap written as [[mgr.prepend_keymap]] tables is refused: use the inline array."
+
+# prepend_keymap, not keymap: that replaces yazi's defaults, which must keep working.
+[[target]]
+format = "toml"
+strategy = "edit"
+key_notation = "vim"
+paths = ["$YAZI_CONFIG_HOME/keymap.toml", "$XDG_CONFIG_HOME/yazi/keymap.toml"]
+
+[target.keys]
+"mgr.prepend_keymap[run=arrow prev].on" = "up"
+"mgr.prepend_keymap[run=arrow next].on" = "down"
+"mgr.prepend_keymap[run=leave].on" = "left"
+"mgr.prepend_keymap[run=enter].on" = "right"
+"mgr.prepend_keymap[run=yank].on" = "yank"
+"mgr.prepend_keymap[run=remove].on" = "delete"
+
+[[target]]
+format = "toml"
+strategy = "edit"
+paths = ["$YAZI_CONFIG_HOME/theme.toml", "$XDG_CONFIG_HOME/yazi/theme.toml"]
+
+[target.theme]
+"mgr.cwd.fg" = "{accent}"
+"mgr.border_style.fg" = "{border}"
+"tabs.active.fg" = "{base}"
+"tabs.active.bg" = "{accent}"
+"tabs.inactive.fg" = "{accent}"
+"tabs.inactive.bg" = "{selection}"
+"mode.normal_main.fg" = "{base}"
+"mode.normal_main.bg" = "{accent}"
+"mode.normal_alt.fg" = "{accent}"
+"mode.normal_alt.bg" = "{selection}"
+"indicator.current.fg" = "{text}"
+"indicator.current.bg" = "{selection}"

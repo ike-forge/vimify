@@ -61,6 +61,7 @@ close() { tmux -u kill-server 2>/dev/null; }
 reset() {
   close
   rm -rf ~/.config/lazygit ~/.config/lazydocker ~/.config/lfk ~/.config/lazysql \
+    ~/.config/bat ~/.config/btop ~/.config/k9s ~/.config/yazi \
     ~/.config/vimify ~/.local/state/vimify ~/.cache/vimify
   mkdir -p ~/.config/lazysql
   cp /tmp/lazysql.seed "$LAZYSQL"
@@ -317,18 +318,16 @@ test_lazygit_honours_what_vimify_wrote() {
   press j "$start"
 }
 
-# The sandbox has tools without a working port: the first of them sits right after the
-# four supported ones.
+# gitui has no working port: it sits right after the eight supported tools.
 test_unsupported_tools_are_greyed_out_and_cannot_be_applied() {
   reset
   tmux -u new-session -d -s app -x 150 -y 40 'vimify 2>&1; echo EXIT=$?; sleep 60'
   wait_for 'apply to all' || return
-  on_screen 'btop .*not supported yet'
+  on_screen 'gitui .*not supported yet'
   # Cursor on an unsupported tool, then try to tick it.
-  tmux -u send-keys -t app j j j j j j Space Enter
+  tmux -u send-keys -t app j j j j j j j j j j Space Enter
   wait_for ' confirm' || return
-  off_screen 'btop'
-  off_screen 'bat'
+  off_screen 'gitui'
   on_screen 'create .*lazygit'
   close
 }
@@ -337,8 +336,8 @@ test_info_modal_shows_what_a_port_covers() {
   reset
   tmux -u new-session -d -s app -x 150 -y 40 'vimify 2>&1; echo EXIT=$?; sleep 60'
   wait_for 'apply to all' || return
-  # lazydocker, the first tool.
-  tmux -u send-keys -t app j j i
+  # The tools sort as bat, btop, k9s, lazydocker.
+  tmux -u send-keys -t app j j j j j i
   wait_for 'any key closes' || return
   on_screen 'Keys *none'
   on_screen 'Theme *4 settings'
@@ -358,11 +357,12 @@ test_versions_are_detected_and_shown() {
   wait_for 'apply to all' || return
   on_screen 'lazygit .*0\.66\.1 .*supported'
   on_screen 'lazysql .*0\.7\.0 .*supported'
-  on_screen 'btop .*1\.3\.2 .*not supported yet'
+  on_screen 'btop .*1\.3\.2 .*supported'
+  on_screen 'gitui .*0\.28\.1 .*not supported yet'
   close
 }
 
-# A bundle that moves lazygit to another major, and gives btop a port it lacks.
+# A bundle that moves lazygit to another major, and gives gitui a port it lacks.
 serve_bundle() {
   mkdir -p /tmp/www
   {
@@ -372,12 +372,12 @@ serve_bundle() {
     sed 's/^versions = .*/versions = ">=5.0"/' /tmp/lazygit.port.toml
     echo "'''"
     echo '[[port]]'
-    echo 'tool = "btop"'
+    echo 'tool = "gitui"'
     echo "text = '''"
-    printf '%s\n' 'schema = 1' 'version = "9"' 'binaries = ["btop"]' 'versions = ">=1.0"' \
-      '[target]' 'format = "yaml"' 'strategy = "edit"' \
-      'paths = ["$XDG_CONFIG_HOME/btop/from-bundle.yml"]' \
-      '[theme]' '"a.b" = "{accent}"'
+    printf '%s\n' 'schema = 1' 'version = "9"' 'binaries = ["gitui"]' 'versions = ">=0.1"' \
+      '[[target]]' 'format = "yaml"' 'strategy = "edit"' \
+      'paths = ["$XDG_CONFIG_HOME/gitui/from-bundle.yml"]' \
+      '[target.theme]' '"a.b" = "{accent}"'
     echo "'''"
   } >/tmp/www/ports.toml
   (cd /tmp/www && exec python3 -m http.server 8765 --bind 127.0.0.1) >/dev/null 2>&1 &
@@ -405,13 +405,13 @@ test_remote_ports_apply_and_keep_working_offline() {
   select_screen || return
   # lazygit 0.66 against a port for 5.x.
   on_screen 'lazygit .*0\.66\.1 .*untested'
-  on_screen 'btop .*1\.3\.2 .*supported'
+  on_screen 'gitui .*0\.28\.1 .*supported'
   close
   exists ~/.cache/vimify/ports.toml
 
   stop_bundle
   select_screen || return
-  on_screen 'btop .*1\.3\.2 .*supported'
+  on_screen 'gitui .*0\.28\.1 .*supported'
   close
   export VIMIFY_PORTS_URL=
 }
@@ -421,7 +421,7 @@ test_unreachable_bundle_falls_back_to_embedded_ports() {
   export VIMIFY_PORTS_URL=http://127.0.0.1:1/ports.toml
   select_screen || return
   on_screen 'lazygit .*supported'
-  on_screen 'btop .*not supported yet'
+  on_screen 'gitui .*not supported yet'
   close
   export VIMIFY_PORTS_URL=
 }
@@ -501,6 +501,104 @@ test_lfk_shows_the_palette() {
   screen -e | grep -aq '48;2;140;170;238' || fail 'selected row not in the accent colour'
   # Its default, tokyonight.
   ! screen -e | grep -aq '122;162;247' || fail 'default theme still on screen'
+}
+
+test_every_file_of_a_tool_is_applied_and_reverted() {
+  reset
+  mkdir -p ~/.config/yazi
+  printf '# mine\n[mgr]\nscrolloff = 5\n' >~/.config/yazi/theme.toml
+  cp ~/.config/yazi/theme.toml /tmp/original
+  confirm
+  on_screen 'apply .*yazi'
+  on_screen 'yazi/keymap.toml'
+  on_screen 'yazi/theme.toml'
+  accept
+  in_file ~/.config/yazi/keymap.toml 'run = "arrow next"'
+  in_file ~/.config/yazi/theme.toml '#8caaee'
+  is_original ~/.config/yazi/theme.toml.bak
+  absent ~/.config/yazi/keymap.toml.bak
+  revert
+  absent ~/.config/yazi/keymap.toml
+  is_original ~/.config/yazi/theme.toml
+}
+
+test_yazi_honours_what_vimify_wrote() {
+  reset
+  mkdir -p ~/.config/vimify /tmp/yazi-demo/one /tmp/yazi-demo/two
+  printf '[keys]\ndown = "m"\n' >"$REFERENCE"
+  apply
+  close
+  tmux -u new-session -d -s app -x 150 -y 40 "$TRUECOLOR yazi /tmp/yazi-demo; sleep 60"
+  wait_for 'two' || return
+  sleep 1
+  local selected='48;2;65;69;89'
+  screen -e | grep -a "$selected" | grep -aq one || fail 'first row not in the selection colour'
+  screen -e | grep -aq "$ACCENT" || fail 'accent colour not on screen'
+  tmux -u send-keys -t app m
+  sleep 0.5
+  screen -e | grep -a "$selected" | grep -aq two || fail 'the rebound key did not move'
+  # yazi's own key survives.
+  tmux -u send-keys -t app k
+  sleep 0.5
+  tmux -u send-keys -t app j
+  sleep 0.5
+  screen -e | grep -a "$selected" | grep -aq two || fail "yazi's own j stopped working"
+}
+
+test_btop_shows_the_palette() {
+  reset
+  apply
+  close
+  in_file ~/.config/btop/btop.conf 'vim_keys = True'
+  tmux -u new-session -d -s app -x 150 -y 40 "$TRUECOLOR btop; sleep 60"
+  wait_for 'proc' || return
+  sleep 2
+  screen -e | grep -aq "$ACCENT" || fail 'accent colour not on screen'
+  screen -e | grep -aq "$BORDER" || fail 'border colour not on screen'
+  # Vim mode: the process list follows j.
+  tmux -u send-keys -t app j
+  sleep 1
+  screen -e | grep -aq "$SELECTION" || fail 'selection colour not on screen'
+  tmux -u send-keys -t app q
+  sleep 1
+  # btop rewrites its config on exit: that is not a manual edit.
+  in_file ~/.config/btop/btop.conf 'color_theme = "vimify"'
+  confirm
+  on_screen 'current .*btop'
+  close
+}
+
+test_bat_uses_the_terminal_palette() {
+  reset
+  mkdir -p ~/.config/bat
+  printf -- '--paging=never\n' >~/.config/bat/config
+  cp ~/.config/bat/config /tmp/original
+  apply
+  in_file ~/.config/bat/config '--theme="ansi"'
+  printf 'fn main() {}\n' >/tmp/demo.rs
+  local out
+  out=$(batcat --color=always --decorations=never /tmp/demo.rs)
+  case "$out" in
+    *'38;2;'*) fail 'bat still uses a truecolor theme' ;;
+    *$'\e[3'*) ;;
+    *) fail 'bat printed no colour' ;;
+  esac
+  revert
+  is_original ~/.config/bat/config
+}
+
+test_k9s_loads_the_skin() {
+  reset
+  apply
+  in_file ~/.config/k9s/config.yaml 'skin: vimify'
+  exists ~/.config/k9s/skins/vimify.yaml
+  close
+  tmux -u new-session -d -s app -x 150 -y 40 "$TRUECOLOR k9s; sleep 60"
+  sleep 3
+  screen -e | grep -aq "$ACCENT" || {
+    fail 'accent colour not on screen'
+    screen | sed 's/^/    | /'
+  }
 }
 
 tests=$(declare -F | awk '{print $3}' | grep '^test_')

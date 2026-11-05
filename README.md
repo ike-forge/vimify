@@ -58,8 +58,8 @@ if you also edit them outside vimify.
 
 ## Supported tools
 
-Tool mappings currently ship with vimify. Community-maintained mappings, in the
-style of Catppuccin ports, are planned.
+bat, btop, k9s, lazydocker, lazygit, lazysql, lfk and yazi. Coverage varies with
+what each tool lets you configure: see [support.md](support.md).
 
 See [vision.md](vision.md) for the longer-term direction.
 

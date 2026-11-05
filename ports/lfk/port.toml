@@ -5,12 +5,12 @@ versions = ">=0.19"
 
 notes = "Theme only: lfk's navigation is fixed, and vimify leaves resource deletion on D."
 
-[target]
+[[target]]
 format = "yaml"
 strategy = "edit"
 paths = ["$LFK_CONFIG_DIR/config.yaml", "$XDG_CONFIG_HOME/lfk/config.yaml"]
 
-[theme]
+[target.theme]
 "theme.primary" = "{accent}"
 "theme.secondary" = "{success}"
 "theme.text" = "{text}"

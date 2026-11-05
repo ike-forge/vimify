@@ -28,9 +28,12 @@ impl Palette {
     }
 }
 
-/// The role a port value refers to: `{accent}` is `accent`, `bold` is none.
-pub fn role_of(value: &str) -> Option<&str> {
-    value.strip_prefix('{')?.strip_suffix('}')
+/// Roles a port value refers to: `"{accent}"` has `accent`, `bold` has none.
+pub fn placeholders(text: &str) -> impl Iterator<Item = &str> {
+    text.split('{')
+        .skip(1)
+        .filter_map(|rest| rest.split_once('}'))
+        .map(|(role, _)| role)
 }
 
 pub fn load(theme: &str) -> Result<Palette> {
@@ -101,9 +104,11 @@ mod tests {
     }
 
     #[test]
-    fn role_of_needs_both_braces() {
-        assert_eq!(role_of("{accent}"), Some("accent"));
-        assert_eq!(role_of("bold"), None);
-        assert_eq!(role_of("{accent"), None);
+    fn placeholders_can_sit_inside_text() {
+        let roles = |text| placeholders(text).collect::<Vec<_>>();
+        assert_eq!(roles("{accent}"), ["accent"]);
+        assert_eq!(roles("\"{accent}\" {base}"), ["accent", "base"]);
+        assert!(roles("bold").is_empty());
+        assert!(roles("{accent").is_empty());
     }
 }

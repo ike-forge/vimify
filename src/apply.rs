@@ -1,15 +1,15 @@
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::{fs, io};
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, ensure};
 
 use crate::edit::Value;
 use crate::palette::Palette;
 use crate::plan::{Action, Op};
-use crate::port::Port;
+use crate::port::{Port, Target};
 use crate::reference::Reference;
-use crate::state::{self, Applied, State};
+use crate::state::{self, Applied, AppliedFile, State};
 use crate::{backup, edit, fsx, render};
 
 pub struct Context<'a> {
@@ -36,10 +36,10 @@ pub fn execute<'a>(
         .filter(|op| op.action.writes())
         .map(|op| {
             let result = match &op.action {
-                Action::Apply { path } | Action::Create { path } | Action::Update { path, .. } => {
-                    apply_tool(&op.tool, path, cx, state, persist)
-                }
-                Action::Revert { path, .. } => revert_tool(&op.tool, path, state, persist),
+                Action::Apply { paths }
+                | Action::Create { paths }
+                | Action::Update { paths, .. } => apply_tool(&op.tool, paths, cx, state, persist),
+                Action::Revert { .. } => revert_tool(&op.tool, state, persist),
                 Action::Current { .. } | Action::Unsupported => Ok(Vec::new()),
             };
             Report { op, result }
@@ -54,14 +54,14 @@ pub struct Output {
 }
 
 pub fn transform(
-    port: &Port,
+    tool: &str,
+    target: &Target,
     reference: &Reference,
     palette: &Palette,
     text: &str,
 ) -> Result<Output> {
-    let target = port.target.as_ref().context("port has no target")?;
-    let rendered = render::render(port, reference, palette)?;
-    let mut editor = edit::open(target.format, text)?;
+    let rendered = render::render(tool, target, reference, palette)?;
+    let mut editor = edit::open(target.format, target.strategy, text)?;
     let mut owned = BTreeMap::new();
     for (setting, value) in rendered.values {
         editor.set(&split(&setting), value.clone())?;
@@ -78,9 +78,18 @@ fn split(setting: &str) -> Vec<&str> {
     setting.split('.').collect()
 }
 
+/// One file of an apply, computed before any file is touched.
+struct Pending<'a> {
+    path: &'a Path,
+    existing: Option<String>,
+    target: &'a Target,
+    output: Output,
+}
+
+/// All of a tool's files or none: a tool half configured may not even start.
 fn apply_tool(
     tool: &str,
-    path: &Path,
+    paths: &[PathBuf],
     cx: &Context,
     state: &mut State,
     persist: &mut dyn FnMut(&State) -> Result<()>,
@@ -90,38 +99,63 @@ fn apply_tool(
         .iter()
         .find(|p| p.name == tool)
         .with_context(|| format!("no port for {tool}"))?;
-    let existing = read(path)?;
-    let original = existing.as_deref().unwrap_or_default();
-    let output = transform(port, cx.reference, cx.palette, original)
-        .with_context(|| format!("{}", path.display()))?;
-
-    // A first apply always backs up: state with no backup means vimify created the
-    // file, and revert would delete it.
-    let changed = existing.as_deref() != Some(&output.text);
-    let first_apply = !state.tools.contains_key(tool);
-    let backup = match existing {
-        Some(_) if changed || first_apply => Some(backup::backup(path)?),
-        _ => None,
-    };
+    ensure!(
+        !paths.is_empty() && port.targets.len() == paths.len(),
+        "port has no target for each file of {tool}"
+    );
+    let pending = port
+        .targets
+        .iter()
+        .zip(paths)
+        .map(|(target, path)| {
+            let existing = read(path)?;
+            let original = existing.as_deref().unwrap_or_default();
+            let output = transform(tool, target, cx.reference, cx.palette, original)
+                .with_context(|| format!("{}", path.display()))?;
+            Ok(Pending {
+                path,
+                existing,
+                target,
+                output,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
 
     let previous = state.tools.get(tool).cloned();
+    let mut files = Vec::new();
+    let mut warnings = Vec::new();
+    for file in &pending {
+        // A first apply always backs up: state with no backup means vimify created the
+        // file, and revert would delete it.
+        let changed = file.existing.as_deref() != Some(&file.output.text);
+        let known = |a: &Applied| a.files.iter().any(|f| f.path == file.path);
+        let first_apply = !previous.as_ref().is_some_and(known);
+        let backup = match file.existing {
+            Some(_) if changed || first_apply => Some(backup::backup(file.path)?),
+            _ => None,
+        };
+        files.push(AppliedFile {
+            path: file.path.to_owned(),
+            backup,
+            file_hash: state::hash(file.output.text.as_bytes()),
+            format: file.target.format,
+            strategy: file.target.strategy,
+            owned: file.output.owned.clone(),
+        });
+        warnings.extend(file.output.warnings.iter().cloned());
+    }
+
     state.record(
         tool,
         Applied {
             port_version: port.version.clone(),
-            path: path.to_owned(),
-            backup,
             reference_hash: cx.reference_hash.to_owned(),
-            file_hash: state::hash(output.text.as_bytes()),
-            format: port.target.as_ref().context("port has no target")?.format,
-            owned: output.owned,
+            files,
         },
     );
     // State first: a crash before the write leaves it pointing at a real backup. The
     // other order orphans the backup, and the next run backs up vimify's own output.
-    let written = persist(state).and_then(|()| {
-        fsx::write_atomic(path, &output.text).with_context(|| format!("{}", path.display()))
-    });
+    let written = persist(state).and_then(|()| write_all(&pending));
     if let Err(e) = written {
         match previous {
             Some(applied) => state.tools.insert(tool.to_owned(), applied),
@@ -130,14 +164,41 @@ fn apply_tool(
         let _ = persist(state);
         return Err(e);
     }
-    Ok(output.warnings)
+    Ok(warnings)
 }
 
-/// Takes vimify's keys back out. The current file is backed up first, so nothing the
+/// A failure puts back the files already written, so state and disk stay in step.
+fn write_all(pending: &[Pending]) -> Result<()> {
+    for (done, file) in pending.iter().enumerate() {
+        let written = fsx::write_atomic(file.path, &file.output.text)
+            .with_context(|| format!("{}", file.path.display()));
+        if written.is_err() {
+            for file in &pending[..done] {
+                let _ = match &file.existing {
+                    Some(text) => fsx::write_atomic(file.path, text),
+                    None => fs::remove_file(file.path),
+                };
+            }
+            return written;
+        }
+    }
+    Ok(())
+}
+
+/// One file of a revert, computed before any file is touched.
+struct Restore<'a> {
+    path: &'a Path,
+    exists: bool,
+    /// `None` deletes the file.
+    text: Option<String>,
+    /// Mode of the backup, for a byte-for-byte restore.
+    permissions: Option<fs::Permissions>,
+}
+
+/// Takes vimify's keys back out. The current files are backed up first, so nothing the
 /// revert overrides is lost.
 fn revert_tool(
     tool: &str,
-    path: &Path,
     state: &mut State,
     persist: &mut dyn FnMut(&State) -> Result<()>,
 ) -> Result<Vec<String>> {
@@ -145,8 +206,44 @@ fn revert_tool(
         .tools
         .get(tool)
         .with_context(|| format!("{tool} is not applied"))?;
-    // Read before anything changes: a lost backup must leave the file alone.
-    let original = match &applied.backup {
+    // Prepared first: a lost backup or a broken file must leave every file alone.
+    let restores = applied
+        .files
+        .iter()
+        .map(prepare_restore)
+        .collect::<Result<Vec<_>>>()?;
+
+    for restore in &restores {
+        if restore.exists {
+            backup::backup(restore.path)?;
+        }
+        let path = restore.path;
+        match &restore.text {
+            Some(text) => {
+                fsx::write_atomic(path, text).with_context(|| format!("{}", path.display()))?;
+                if let Some(permissions) = &restore.permissions {
+                    fs::set_permissions(path, permissions.clone())
+                        .with_context(|| format!("{}", path.display()))?;
+                }
+            }
+            None => match fs::remove_file(path) {
+                Err(e) if e.kind() != io::ErrorKind::NotFound => {
+                    return Err(e).with_context(|| format!("{}", path.display()));
+                }
+                _ => {}
+            },
+        }
+    }
+    // State last: after a crash the tool still counts as applied, and a retry restores
+    // the same files.
+    state.tools.remove(tool);
+    persist(state)?;
+    Ok(Vec::new())
+}
+
+fn prepare_restore(file: &AppliedFile) -> Result<Restore<'_>> {
+    let path = file.path.as_path();
+    let original = match &file.backup {
         Some(backup) => {
             let text = fs::read_to_string(backup)
                 .with_context(|| format!("backup {}", backup.display()))?;
@@ -161,46 +258,28 @@ fn revert_tool(
     // byte, which rewriting keys cannot promise.
     let edited = current
         .as_ref()
-        .filter(|text| state::hash(text.as_bytes()) != applied.file_hash);
-    let output = match edited {
-        Some(text) => {
+        .filter(|text| state::hash(text.as_bytes()) != file.file_hash);
+    let (text, permissions) = match (edited, original) {
+        (Some(text), original) => {
             let source = original.as_ref().map_or("", |(text, _)| text);
-            Some(
-                restore_keys(applied, text, source)
-                    .with_context(|| format!("{}", path.display()))?,
-            )
+            let text =
+                restore_keys(file, text, source).with_context(|| format!("{}", path.display()))?;
+            (Some(text), None)
         }
-        None => original.as_ref().map(|(text, _)| text.clone()),
+        (None, Some((text, permissions))) => (Some(text), Some(permissions)),
+        (None, None) => (None, None),
     };
-
-    if current.is_some() {
-        backup::backup(path)?;
-    }
-    match output {
-        Some(text) => {
-            fsx::write_atomic(path, &text).with_context(|| format!("{}", path.display()))?;
-            if let (None, Some((_, permissions))) = (edited, original) {
-                fs::set_permissions(path, permissions)
-                    .with_context(|| format!("{}", path.display()))?;
-            }
-        }
-        None => match fs::remove_file(path) {
-            Err(e) if e.kind() != io::ErrorKind::NotFound => {
-                return Err(e).with_context(|| format!("{}", path.display()));
-            }
-            _ => {}
-        },
-    }
-    // State last: after a crash the tool still counts as applied, and a retry restores
-    // the same file.
-    state.tools.remove(tool);
-    persist(state)?;
-    Ok(Vec::new())
+    Ok(Restore {
+        path,
+        exists: current.is_some(),
+        text,
+        permissions,
+    })
 }
 
-fn restore_keys(applied: &Applied, text: &str, original: &str) -> Result<String> {
-    let mut editor = edit::open(applied.format, text)?;
-    for setting in applied.owned.keys() {
+fn restore_keys(file: &AppliedFile, text: &str, original: &str) -> Result<String> {
+    let mut editor = edit::open(file.format, file.strategy, text)?;
+    for setting in file.owned.keys() {
         editor.restore(&split(setting), original)?;
     }
     Ok(editor.render())
@@ -220,10 +299,9 @@ mod tests {
     use crate::{palette, port};
     use anyhow::anyhow;
     use std::os::unix::fs::{PermissionsExt, symlink};
-    use std::path::PathBuf;
     use tempfile::TempDir;
 
-    const PORT: &str = "schema = 1\nversion = \"1\"\nbinaries = [\"t\"]\n[target]\nformat = \"yaml\"\nstrategy = \"edit\"\nkey_notation = \"angle\"\npaths = []\n[keys]\n\"a.down\" = \"down\"\n";
+    const PORT: &str = "schema = 1\nversion = \"1\"\nbinaries = [\"t\"]\n[[target]]\nformat = \"yaml\"\nstrategy = \"edit\"\nkey_notation = \"angle\"\npaths = []\n[target.keys]\n\"a.down\" = \"down\"\n";
 
     struct Fixture {
         ports: Vec<Port>,
@@ -285,7 +363,13 @@ mod tests {
         let path = config(&dir, "# mine\nb: 1\n");
         let mut fx = Fixture::new();
 
-        fx.run(Action::Apply { path: path.clone() }, "ref").unwrap();
+        fx.run(
+            Action::Apply {
+                paths: vec![path.clone()],
+            },
+            "ref",
+        )
+        .unwrap();
 
         let written = fs::read_to_string(&path).unwrap();
         assert_eq!(written, "# mine\nb: 1\na:\n  down: j\n");
@@ -294,11 +378,12 @@ mod tests {
             "# mine\nb: 1\n"
         );
         let applied = &fx.state.tools["t"];
-        assert_eq!(applied.backup, Some(bak(&path, ".bak")));
-        assert_eq!(applied.path, path);
         assert_eq!(applied.port_version, "1");
         assert_eq!(applied.reference_hash, "ref");
-        assert_eq!(applied.file_hash, state::hash(written.as_bytes()));
+        let file = &applied.files[0];
+        assert_eq!(file.backup, Some(bak(&path, ".bak")));
+        assert_eq!(file.path, path);
+        assert_eq!(file.file_hash, state::hash(written.as_bytes()));
     }
 
     #[test]
@@ -307,11 +392,16 @@ mod tests {
         let path = dir.path().join("sub/config.yml");
         let mut fx = Fixture::new();
 
-        fx.run(Action::Create { path: path.clone() }, "ref")
-            .unwrap();
+        fx.run(
+            Action::Create {
+                paths: vec![path.clone()],
+            },
+            "ref",
+        )
+        .unwrap();
 
         assert_eq!(fs::read_to_string(&path).unwrap(), "a:\n  down: j\n");
-        assert_eq!(fx.state.tools["t"].backup, None);
+        assert_eq!(fx.state.tools["t"].files[0].backup, None);
     }
 
     #[test]
@@ -320,9 +410,18 @@ mod tests {
         let path = config(&dir, "a:\n  down: j\n");
         let mut fx = Fixture::new();
 
-        fx.run(Action::Apply { path: path.clone() }, "ref").unwrap();
+        fx.run(
+            Action::Apply {
+                paths: vec![path.clone()],
+            },
+            "ref",
+        )
+        .unwrap();
 
-        assert_eq!(fx.state.tools["t"].backup, Some(bak(&path, ".bak")));
+        assert_eq!(
+            fx.state.tools["t"].files[0].backup,
+            Some(bak(&path, ".bak"))
+        );
         assert!(bak(&path, ".bak").exists());
     }
 
@@ -331,12 +430,18 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = config(&dir, "b: 1\n");
         let mut fx = Fixture::new();
-        fx.run(Action::Apply { path: path.clone() }, "ref").unwrap();
+        fx.run(
+            Action::Apply {
+                paths: vec![path.clone()],
+            },
+            "ref",
+        )
+        .unwrap();
 
         fx.reference.keys.insert("down".into(), "n".into());
         fx.run(
             Action::Update {
-                path: path.clone(),
+                paths: vec![path.clone()],
                 manual: false,
             },
             "new",
@@ -344,7 +449,10 @@ mod tests {
         .unwrap();
 
         assert_eq!(fs::read_to_string(&path).unwrap(), "b: 1\na:\n  down: n\n");
-        assert_eq!(fx.state.tools["t"].backup, Some(bak(&path, ".bak")));
+        assert_eq!(
+            fx.state.tools["t"].files[0].backup,
+            Some(bak(&path, ".bak"))
+        );
         assert_eq!(fx.state.tools["t"].reference_hash, "new");
         assert_eq!(fs::read_to_string(bak(&path, ".bak")).unwrap(), "b: 1\n");
         assert!(bak(&path, ".bak.1").exists());
@@ -355,11 +463,17 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = config(&dir, "b: 1\n");
         let mut fx = Fixture::new();
-        fx.run(Action::Apply { path: path.clone() }, "ref").unwrap();
+        fx.run(
+            Action::Apply {
+                paths: vec![path.clone()],
+            },
+            "ref",
+        )
+        .unwrap();
 
         fx.run(
             Action::Update {
-                path: path.clone(),
+                paths: vec![path.clone()],
                 manual: false,
             },
             "ref",
@@ -378,7 +492,13 @@ mod tests {
         symlink(&real, &link).unwrap();
         let mut fx = Fixture::new();
 
-        fx.run(Action::Apply { path: link.clone() }, "ref").unwrap();
+        fx.run(
+            Action::Apply {
+                paths: vec![link.clone()],
+            },
+            "ref",
+        )
+        .unwrap();
 
         assert!(link.symlink_metadata().unwrap().file_type().is_symlink());
         assert_eq!(fs::read_to_string(&real).unwrap(), "b: 1\na:\n  down: j\n");
@@ -391,7 +511,15 @@ mod tests {
         let path = config(&dir, "- not\n- a mapping\n");
         let mut fx = Fixture::new();
 
-        assert!(fx.run(Action::Apply { path: path.clone() }, "ref").is_err());
+        assert!(
+            fx.run(
+                Action::Apply {
+                    paths: vec![path.clone()]
+                },
+                "ref"
+            )
+            .is_err()
+        );
 
         assert_eq!(fs::read_to_string(&path).unwrap(), "- not\n- a mapping\n");
         assert!(!bak(&path, ".bak").exists());
@@ -404,9 +532,13 @@ mod tests {
         let path = config(&dir, "b: 1\n");
         let mut fx = Fixture::new();
 
-        let result = fx.run_with(Action::Apply { path: path.clone() }, "ref", &mut |_| {
-            Err(anyhow!("disk full"))
-        });
+        let result = fx.run_with(
+            Action::Apply {
+                paths: vec![path.clone()],
+            },
+            "ref",
+            &mut |_| Err(anyhow!("disk full")),
+        );
 
         assert!(result.is_err());
         assert_eq!(fs::read_to_string(&path).unwrap(), "b: 1\n");
@@ -420,7 +552,7 @@ mod tests {
         let mut fx = Fixture::new();
         let probe = path.clone();
 
-        fx.run_with(Action::Apply { path }, "ref", &mut |state| {
+        fx.run_with(Action::Apply { paths: vec![path] }, "ref", &mut |state| {
             assert_eq!(fs::read_to_string(&probe).unwrap(), "b: 1\n");
             assert!(state.tools.contains_key("t"));
             Ok(())
@@ -439,7 +571,7 @@ mod tests {
 
         let result = fx.run_with(
             Action::Create {
-                path: locked.join("config.yml"),
+                paths: vec![locked.join("config.yml")],
             },
             "ref",
             &mut |state| {
@@ -464,11 +596,13 @@ mod tests {
         let ops = [
             Op {
                 tool: "t".into(),
-                action: Action::Apply { path: bad },
+                action: Action::Apply { paths: vec![bad] },
             },
             Op {
                 tool: "t".into(),
-                action: Action::Create { path: good.clone() },
+                action: Action::Create {
+                    paths: vec![good.clone()],
+                },
             },
         ];
         let cx = Context {
@@ -487,7 +621,7 @@ mod tests {
 
     fn revert(path: &Path) -> Action {
         Action::Revert {
-            path: path.to_owned(),
+            paths: vec![path.to_owned()],
             manual: false,
         }
     }
@@ -497,7 +631,13 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = config(&dir, "# mine\nb: 1\n");
         let mut fx = Fixture::new();
-        fx.run(Action::Apply { path: path.clone() }, "ref").unwrap();
+        fx.run(
+            Action::Apply {
+                paths: vec![path.clone()],
+            },
+            "ref",
+        )
+        .unwrap();
 
         fx.run(revert(&path), "ref").unwrap();
 
@@ -511,11 +651,17 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = config(&dir, "b: 1\n");
         let mut fx = Fixture::new();
-        fx.run(Action::Apply { path: path.clone() }, "ref").unwrap();
+        fx.run(
+            Action::Apply {
+                paths: vec![path.clone()],
+            },
+            "ref",
+        )
+        .unwrap();
         fx.reference.keys.insert("down".into(), "n".into());
         fx.run(
             Action::Update {
-                path: path.clone(),
+                paths: vec![path.clone()],
                 manual: false,
             },
             "new",
@@ -532,7 +678,13 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = config(&dir, "# mine\nb: 1\n");
         let mut fx = Fixture::new();
-        fx.run(Action::Apply { path: path.clone() }, "ref").unwrap();
+        fx.run(
+            Action::Apply {
+                paths: vec![path.clone()],
+            },
+            "ref",
+        )
+        .unwrap();
         let applied = fs::read_to_string(&path).unwrap();
         fs::write(&path, applied.replace("b: 1", "b: 2 # edited")).unwrap();
 
@@ -550,7 +702,13 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = config(&dir, "b: 1\n");
         let mut fx = Fixture::new();
-        fx.run(Action::Apply { path: path.clone() }, "ref").unwrap();
+        fx.run(
+            Action::Apply {
+                paths: vec![path.clone()],
+            },
+            "ref",
+        )
+        .unwrap();
         fs::write(&path, "b: 1\na:\n  down: j\n  mine: 2\n").unwrap();
 
         fx.run(revert(&path), "ref").unwrap();
@@ -563,7 +721,13 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = config(&dir, "a:\n  down: n # mine\nb: 1\n");
         let mut fx = Fixture::new();
-        fx.run(Action::Apply { path: path.clone() }, "ref").unwrap();
+        fx.run(
+            Action::Apply {
+                paths: vec![path.clone()],
+            },
+            "ref",
+        )
+        .unwrap();
         fs::write(&path, "a:\n  down: j\nb: 2\n").unwrap();
 
         fx.run(revert(&path), "ref").unwrap();
@@ -576,7 +740,13 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = config(&dir, "b: 1\n");
         let mut fx = Fixture::new();
-        fx.run(Action::Apply { path: path.clone() }, "ref").unwrap();
+        fx.run(
+            Action::Apply {
+                paths: vec![path.clone()],
+            },
+            "ref",
+        )
+        .unwrap();
         fs::write(&path, "b: 2\na:\n  down: x\n").unwrap();
 
         fx.run(revert(&path), "ref").unwrap();
@@ -593,8 +763,13 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("config.yml");
         let mut fx = Fixture::new();
-        fx.run(Action::Create { path: path.clone() }, "ref")
-            .unwrap();
+        fx.run(
+            Action::Create {
+                paths: vec![path.clone()],
+            },
+            "ref",
+        )
+        .unwrap();
         fs::write(&path, "a:\n  down: j\nmine: 1\n").unwrap();
 
         fx.run(revert(&path), "ref").unwrap();
@@ -607,7 +782,13 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = config(&dir, "b: 1\n");
         let mut fx = Fixture::new();
-        fx.run(Action::Apply { path: path.clone() }, "ref").unwrap();
+        fx.run(
+            Action::Apply {
+                paths: vec![path.clone()],
+            },
+            "ref",
+        )
+        .unwrap();
         fs::write(&path, "- not a mapping\n").unwrap();
 
         assert!(fx.run(revert(&path), "ref").is_err());
@@ -622,11 +803,17 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = config(&dir, "b: 1\n");
         let mut fx = Fixture::new();
-        fx.run(Action::Apply { path: path.clone() }, "ref").unwrap();
+        fx.run(
+            Action::Apply {
+                paths: vec![path.clone()],
+            },
+            "ref",
+        )
+        .unwrap();
         fx.ports[0] = port::parse("t", &PORT.replace("a.down", "a.up")).unwrap();
         fx.run(
             Action::Update {
-                path: path.clone(),
+                paths: vec![path.clone()],
                 manual: false,
             },
             "ref",
@@ -648,8 +835,13 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("config.yml");
         let mut fx = Fixture::new();
-        fx.run(Action::Create { path: path.clone() }, "ref")
-            .unwrap();
+        fx.run(
+            Action::Create {
+                paths: vec![path.clone()],
+            },
+            "ref",
+        )
+        .unwrap();
 
         fx.run(revert(&path), "ref").unwrap();
 
@@ -666,8 +858,13 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("config.yml");
         let mut fx = Fixture::new();
-        fx.run(Action::Create { path: path.clone() }, "ref")
-            .unwrap();
+        fx.run(
+            Action::Create {
+                paths: vec![path.clone()],
+            },
+            "ref",
+        )
+        .unwrap();
         fs::remove_file(&path).unwrap();
 
         fx.run(revert(&path), "ref").unwrap();
@@ -682,7 +879,13 @@ mod tests {
         let path = config(&dir, "b: 1\n");
         fs::set_permissions(&path, fs::Permissions::from_mode(0o640)).unwrap();
         let mut fx = Fixture::new();
-        fx.run(Action::Apply { path: path.clone() }, "ref").unwrap();
+        fx.run(
+            Action::Apply {
+                paths: vec![path.clone()],
+            },
+            "ref",
+        )
+        .unwrap();
         fs::remove_file(&path).unwrap();
 
         fx.run(revert(&path), "ref").unwrap();
@@ -700,7 +903,13 @@ mod tests {
         fs::write(&real, "b: 1\n").unwrap();
         symlink(&real, &link).unwrap();
         let mut fx = Fixture::new();
-        fx.run(Action::Apply { path: link.clone() }, "ref").unwrap();
+        fx.run(
+            Action::Apply {
+                paths: vec![link.clone()],
+            },
+            "ref",
+        )
+        .unwrap();
 
         fx.run(revert(&link), "ref").unwrap();
 
@@ -713,7 +922,13 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = config(&dir, "b: 1\n");
         let mut fx = Fixture::new();
-        fx.run(Action::Apply { path: path.clone() }, "ref").unwrap();
+        fx.run(
+            Action::Apply {
+                paths: vec![path.clone()],
+            },
+            "ref",
+        )
+        .unwrap();
         let applied = fs::read_to_string(&path).unwrap();
         fs::remove_file(bak(&path, ".bak")).unwrap();
 
@@ -729,7 +944,13 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = config(&dir, "b: 1\n");
         let mut fx = Fixture::new();
-        fx.run(Action::Apply { path: path.clone() }, "ref").unwrap();
+        fx.run(
+            Action::Apply {
+                paths: vec![path.clone()],
+            },
+            "ref",
+        )
+        .unwrap();
         let probe = path.clone();
 
         fx.run_with(revert(&path), "ref", &mut |state| {
@@ -740,23 +961,153 @@ mod tests {
         .unwrap();
     }
 
+    const TWO_FILES: &str = "schema = 1\nversion = \"1\"\nbinaries = [\"t\"]\n[[target]]\nformat = \"yaml\"\nstrategy = \"edit\"\nkey_notation = \"angle\"\npaths = []\n[target.keys]\n\"a.down\" = \"down\"\n[[target]]\nformat = \"toml\"\nstrategy = \"edit\"\npaths = []\n[target.theme]\n\"c.d\" = \"{accent}\"\n";
+
+    fn two_files(dir: &TempDir) -> (Fixture, PathBuf, PathBuf) {
+        let mut fx = Fixture::new();
+        fx.ports = vec![port::parse("t", TWO_FILES).unwrap()];
+        let yaml = dir.path().join("a.yml");
+        let toml = dir.path().join("b.toml");
+        (fx, yaml, toml)
+    }
+
+    #[test]
+    fn each_file_gets_its_own_settings_and_backup() {
+        let dir = TempDir::new().unwrap();
+        let (mut fx, yaml, toml) = two_files(&dir);
+        fs::write(&yaml, "b: 1\n").unwrap();
+        let paths = vec![yaml.clone(), toml.clone()];
+
+        fx.run(Action::Apply { paths }, "ref").unwrap();
+
+        assert_eq!(fs::read_to_string(&yaml).unwrap(), "b: 1\na:\n  down: j\n");
+        assert_eq!(fs::read_to_string(&toml).unwrap(), "[c]\nd = \"#8caaee\"\n");
+        let files = &fx.state.tools["t"].files;
+        assert_eq!(files[0].backup, Some(bak(&yaml, ".bak")));
+        assert_eq!(files[1].backup, None);
+        assert_eq!(files[1].format, port::Format::Toml);
+    }
+
+    #[test]
+    fn revert_undoes_every_file() {
+        let dir = TempDir::new().unwrap();
+        let (mut fx, yaml, toml) = two_files(&dir);
+        fs::write(&yaml, "b: 1\n").unwrap();
+        let paths = vec![yaml.clone(), toml.clone()];
+        fx.run(Action::Apply { paths }, "ref").unwrap();
+
+        fx.run(revert(&yaml), "ref").unwrap();
+
+        assert_eq!(fs::read_to_string(&yaml).unwrap(), "b: 1\n");
+        assert!(!toml.exists());
+        assert!(fx.state.tools.is_empty());
+    }
+
+    #[test]
+    fn a_broken_second_file_stops_the_tool_before_any_write() {
+        let dir = TempDir::new().unwrap();
+        let (mut fx, yaml, toml) = two_files(&dir);
+        fs::write(&yaml, "b: 1\n").unwrap();
+        fs::write(&toml, "c = [").unwrap();
+        let paths = vec![yaml.clone(), toml.clone()];
+
+        assert!(fx.run(Action::Apply { paths }, "ref").is_err());
+
+        assert_eq!(fs::read_to_string(&yaml).unwrap(), "b: 1\n");
+        assert!(!bak(&yaml, ".bak").exists());
+        assert!(fx.state.tools.is_empty());
+    }
+
+    #[test]
+    fn a_failed_second_write_puts_the_first_file_back() {
+        let dir = TempDir::new().unwrap();
+        let (mut fx, yaml, _) = two_files(&dir);
+        let created = dir.path().join("created.yml");
+        let locked = dir.path().join("locked");
+        fs::create_dir(&locked).unwrap();
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o555)).unwrap();
+        fs::write(&yaml, "b: 1\n").unwrap();
+        let failed = locked.join("b.toml");
+
+        let existing = fx.run(
+            Action::Apply {
+                paths: vec![yaml.clone(), failed.clone()],
+            },
+            "ref",
+        );
+        let missing = fx.run(
+            Action::Create {
+                paths: vec![created.clone(), failed],
+            },
+            "ref",
+        );
+
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(existing.is_err() && missing.is_err());
+        assert_eq!(fs::read_to_string(&yaml).unwrap(), "b: 1\n");
+        assert!(!created.exists());
+        assert!(fx.state.tools.is_empty());
+    }
+
+    #[test]
+    fn a_lost_backup_of_one_file_leaves_every_file_alone() {
+        let dir = TempDir::new().unwrap();
+        let (mut fx, yaml, toml) = two_files(&dir);
+        fs::write(&yaml, "b: 1\n").unwrap();
+        fs::write(&toml, "e = 1\n").unwrap();
+        let paths = vec![yaml.clone(), toml.clone()];
+        fx.run(Action::Apply { paths }, "ref").unwrap();
+        let first = fs::read_to_string(&yaml).unwrap();
+        fs::remove_file(bak(&toml, ".bak")).unwrap();
+
+        assert!(fx.run(revert(&yaml), "ref").is_err());
+
+        assert_eq!(fs::read_to_string(&yaml).unwrap(), first);
+        assert!(!bak(&yaml, ".bak.1").exists());
+        assert!(fx.state.tools.contains_key("t"));
+    }
+
+    #[test]
+    fn revert_of_an_edited_block_keeps_the_user_lines() {
+        let dir = TempDir::new().unwrap();
+        let path = config(&dir, "--paging=never\n");
+        let text = "schema = 1\nversion = \"1\"\nbinaries = [\"t\"]\n[[target]]\nformat = \"lines\"\nstrategy = \"block\"\npaths = []\ntemplate = \"--theme=x\"\n";
+        let mut fx = Fixture::new();
+        fx.ports = vec![port::parse("t", text).unwrap()];
+        fx.run(
+            Action::Apply {
+                paths: vec![path.clone()],
+            },
+            "ref",
+        )
+        .unwrap();
+        let applied = fs::read_to_string(&path).unwrap();
+        fs::write(&path, format!("{applied}--wrap=never\n")).unwrap();
+
+        fx.run(revert(&path), "ref").unwrap();
+
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "--paging=never\n--wrap=never\n"
+        );
+    }
+
     #[test]
     fn ports_match_their_golden_files() {
         let reference = Reference::default();
         let palette = palette::load("catppuccin-frappe").unwrap();
         let cases = port::golden_cases();
         assert!(!cases.is_empty());
-        for (port, input, expected) in cases {
-            let port = &port;
+        for (port, target, input, expected) in cases {
+            let target = &target;
             let name = &port.name;
-            let out = transform(port, &reference, &palette, input).unwrap();
+            let out = transform(name, target, &reference, &palette, input).unwrap();
             assert_eq!(out.text, expected, "port {name}");
             assert!(out.warnings.is_empty(), "port {name}: {:?}", out.warnings);
-            let again = transform(port, &reference, &palette, &out.text).unwrap();
+            let again = transform(name, target, &reference, &palette, &out.text).unwrap();
             assert_eq!(again.text, out.text, "port {name} is not idempotent");
 
-            let format = port.target.as_ref().unwrap().format;
-            let mut editor = edit::open(format, &out.text).unwrap();
+            let mut editor = edit::open(target.format, target.strategy, &out.text).unwrap();
             for setting in out.owned.keys() {
                 editor.restore(&split(setting), input).unwrap();
             }

@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, anyhow, bail};
-use toml_edit::{Array, DocumentMut, Item, Table, TableLike};
+use toml_edit::{Array, DocumentMut, InlineTable, Item, Table, TableLike};
 
 use super::{Editor, Value};
 
@@ -26,7 +26,14 @@ impl Editor for TomlEditor {
     fn get(&self, path: &[&str]) -> Option<Value> {
         let (last, parents) = path.split_last()?;
         let mut table: &dyn TableLike = self.doc.as_table();
-        for key in parents {
+        for (i, key) in parents.iter().enumerate() {
+            if let Some(entry) = Entry::parse(key) {
+                let inline = entry.find(table.get(entry.array)?.as_array()?)?;
+                return inline
+                    .get(parents.get(i + 1).unwrap_or(last))
+                    .map(string)
+                    .map(Value::Str);
+            }
             table = table.get(key)?.as_table_like()?;
         }
         table.get(last).map(from_toml)
@@ -47,10 +54,110 @@ impl Editor for TomlEditor {
     }
 }
 
+/// `keymap[run=quit]`: the entry of the `keymap` array whose `run` is `quit`, for tools
+/// that key a list of tables by one of their fields.
+struct Entry<'a> {
+    array: &'a str,
+    field: &'a str,
+    value: &'a str,
+}
+
+impl<'a> Entry<'a> {
+    fn parse(segment: &'a str) -> Option<Self> {
+        let (array, selector) = segment.strip_suffix(']')?.split_once('[')?;
+        let (field, value) = selector.split_once('=')?;
+        Some(Self {
+            array,
+            field,
+            value,
+        })
+    }
+
+    fn position(&self, array: &Array) -> Option<usize> {
+        array.iter().position(|item| {
+            let field = item.as_inline_table().and_then(|t| t.get(self.field));
+            field.and_then(toml_edit::Value::as_str) == Some(self.value)
+        })
+    }
+
+    fn find<'b>(&self, array: &'b Array) -> Option<&'b InlineTable> {
+        array.get(self.position(array)?)?.as_inline_table()
+    }
+}
+
+fn set_entry(table: &mut dyn TableLike, entry: &Entry, field: &str, value: &Value) -> Result<()> {
+    if !table.contains_key(entry.array) {
+        table.insert(entry.array, Item::Value(Array::new().into()));
+    }
+    let Some(array) = table.get_mut(entry.array).and_then(Item::as_array_mut) else {
+        bail!("{} is not an inline array", entry.array);
+    };
+    let position = entry.position(array).unwrap_or_else(|| {
+        // A multi-line array stays one: `push` would put the entry on the last line.
+        let last = array.iter().last().and_then(|item| item.decor().prefix());
+        let indent = last
+            .and_then(|prefix| prefix.as_str()?.rsplit_once('\n'))
+            .map(|(_, indent)| format!("\n{indent}"));
+        let mut new = InlineTable::new();
+        new.insert(entry.field, entry.value.into());
+        array.push(new);
+        if let (Some(indent), Some(item)) = (indent, array.iter_mut().last()) {
+            item.decor_mut().set_prefix(indent);
+        }
+        array.len() - 1
+    });
+    let item = array
+        .get_mut(position)
+        .and_then(toml_edit::Value::as_inline_table_mut);
+    let Some(item) = item else {
+        bail!("{} is not an inline table", entry.array);
+    };
+    item.insert(field, to_toml(value));
+    Ok(())
+}
+
+/// Drops the entry and an array only it kept alive, or brings the original's field back.
+fn restore_entry(
+    table: &mut dyn TableLike,
+    original: Option<&dyn TableLike>,
+    entry: &Entry,
+    field: &str,
+) {
+    let Some(array) = table.get_mut(entry.array).and_then(Item::as_array_mut) else {
+        return;
+    };
+    let source = original
+        .and_then(|t| t.get(entry.array))
+        .and_then(Item::as_array);
+    let kept = source.and_then(|a| entry.find(a));
+    let Some(position) = entry.position(array) else {
+        return;
+    };
+    match kept.and_then(|t| t.get(field)) {
+        Some(value) => {
+            if let Some(item) = array
+                .get_mut(position)
+                .and_then(toml_edit::Value::as_inline_table_mut)
+            {
+                item.insert(field, value.clone());
+            }
+        }
+        None => {
+            array.remove(position);
+        }
+    }
+    if array.is_empty() && source.is_none() {
+        table.remove(entry.array);
+    }
+}
+
 fn set_in(table: &mut dyn TableLike, path: &[&str], value: &Value) -> Result<()> {
     let [key, rest @ ..] = path else {
         bail!("empty path");
     };
+    if let (Some(entry), [field]) = (Entry::parse(key), rest) {
+        return set_entry(table, &entry, field, value);
+    }
     if rest.is_empty() {
         let mut new = to_toml(value);
         // In place: `insert` replaces the key too, which holds the comment above it.
@@ -90,6 +197,10 @@ fn restore_in(current: &mut dyn TableLike, original: Option<&dyn TableLike>, pat
     let [key, rest @ ..] = path else {
         return;
     };
+    if let (Some(entry), [field]) = (Entry::parse(key), rest) {
+        restore_entry(current, original, &entry, field);
+        return;
+    }
     if !rest.is_empty() {
         let Some(child) = current.get_mut(key).and_then(Item::as_table_like_mut) else {
             return;
@@ -306,5 +417,78 @@ mod tests {
         let once = edit("x = 1\n", &["a", "b"], list(&["y"])).unwrap();
         let twice = edit(&once, &["a", "b"], list(&["y"])).unwrap();
         assert_eq!(once, twice);
+    }
+
+    const ENTRY: &[&str] = &["mgr", "prepend_keymap[run=arrow next]", "on"];
+
+    #[test]
+    fn an_entry_is_added_once_and_then_updated() {
+        let once = edit("", ENTRY, str("j")).unwrap();
+        assert_eq!(
+            once,
+            "[mgr]\nprepend_keymap = [{ run = \"arrow next\", on = \"j\" }]\n"
+        );
+        let twice = edit(&once, ENTRY, str("n")).unwrap();
+        assert_eq!(
+            twice,
+            "[mgr]\nprepend_keymap = [{ run = \"arrow next\", on = \"n\" }]\n"
+        );
+    }
+
+    #[test]
+    fn an_entry_joins_the_users_entries() {
+        let text = "[mgr]\nprepend_keymap = [{ on = \"x\", run = \"mine\" }]\n";
+        let out = edit(text, ENTRY, str("j")).unwrap();
+        assert_eq!(get(&out, ENTRY), Some(str("j")));
+        assert!(out.contains("run = \"mine\""));
+    }
+
+    #[test]
+    fn a_multi_line_array_stays_multi_line() {
+        let text = "[mgr]\nprepend_keymap = [\n\t# why\n\t{ on = \"x\", run = \"mine\" },\n]\n";
+        let out = edit(text, ENTRY, str("j")).unwrap();
+        assert_eq!(
+            out,
+            "[mgr]\nprepend_keymap = [\n\t# why\n\t{ on = \"x\", run = \"mine\" },\n\t{ run = \"arrow next\", on = \"j\" },\n]\n"
+        );
+        assert_eq!(restore(&out, ENTRY, text), text);
+    }
+
+    #[test]
+    fn get_of_an_absent_entry_is_none() {
+        let text = "[mgr]\nprepend_keymap = [{ on = \"x\", run = \"mine\" }]\n";
+        assert_eq!(get(text, ENTRY), None);
+        assert_eq!(get("", ENTRY), None);
+    }
+
+    #[test]
+    fn restore_removes_an_entry_and_the_array_it_needed() {
+        let text = edit("[mgr]\nx = 1\n", ENTRY, str("j")).unwrap();
+        assert_eq!(restore(&text, ENTRY, "[mgr]\nx = 1\n"), "[mgr]\nx = 1\n");
+    }
+
+    #[test]
+    fn restore_keeps_the_users_entries() {
+        let original = "[mgr]\nprepend_keymap = [{ on = \"x\", run = \"mine\" }]\n";
+        let text = edit(original, ENTRY, str("j")).unwrap();
+        let out = restore(&text, ENTRY, original);
+        assert_eq!(
+            get(&out, &["mgr", "prepend_keymap[run=mine]", "on"]),
+            Some(str("x"))
+        );
+        assert_eq!(get(&out, ENTRY), None);
+    }
+
+    #[test]
+    fn restore_brings_back_the_key_of_an_entry() {
+        let original = "[mgr]\nprepend_keymap = [{ on = \"x\", run = \"arrow next\" }]\n";
+        let text = edit(original, ENTRY, str("j")).unwrap();
+        assert_eq!(get(&restore(&text, ENTRY, original), ENTRY), Some(str("x")));
+    }
+
+    #[test]
+    fn an_array_of_tables_is_refused() {
+        let text = "[[mgr.prepend_keymap]]\non = \"x\"\nrun = \"mine\"\n";
+        assert!(edit(text, ENTRY, str("j")).is_err());
     }
 }

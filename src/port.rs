@@ -7,7 +7,7 @@ use semver::{Op, Version, VersionReq};
 use serde::{Deserialize, Serialize};
 
 use crate::actions::{self, Notation};
-use crate::{palette, paths};
+use crate::{edit, palette, paths};
 
 static EMBEDDED: Dir = include_dir!("$CARGO_MANIFEST_DIR/ports");
 
@@ -22,11 +22,8 @@ pub struct Port {
     pub versions: VersionReq,
     /// Arguments that print the tool's version.
     pub version_args: Vec<String>,
-    pub target: Option<Target>,
-    /// Dotted tool setting → action.
-    pub keys: BTreeMap<String, String>,
-    /// Dotted tool setting → `{role}` or literal values.
-    pub theme: BTreeMap<String, ThemeValue>,
+    /// One per file. Splitting a tool's config across files changes nothing else.
+    pub targets: Vec<Target>,
     /// Why the port covers what it does; shown in the info modal.
     pub notes: Option<String>,
 }
@@ -37,15 +34,13 @@ impl Port {
     }
 
     pub fn unsupported_reason(&self) -> Option<&'static str> {
-        let Some(target) = &self.target else {
+        if self.targets.is_empty() {
             return Some("vimify does not know this tool's config yet");
-        };
-        if !matches!(target.format, Format::Yaml | Format::Toml)
-            || target.strategy != Strategy::Edit
-        {
+        }
+        if !self.targets.iter().all(Target::editable) {
             return Some("vimify cannot edit this config format yet");
         }
-        if self.keys.is_empty() && self.theme.is_empty() {
+        if self.targets.iter().any(Target::empty) {
             return Some("this port has no mappings yet");
         }
         None
@@ -72,7 +67,14 @@ impl Port {
         actions::DEFAULTS
             .iter()
             .map(|(action, _)| *action)
-            .partition(|action| self.keys.values().any(|a| a == action))
+            .partition(|action| {
+                let bound = |t: &Target| t.keys.values().any(|a| a == action);
+                self.targets.iter().any(bound)
+            })
+    }
+
+    pub fn theme_settings(&self) -> usize {
+        self.targets.iter().map(|t| t.theme.len()).sum()
     }
 }
 
@@ -92,7 +94,7 @@ pub enum Format {
     Lines,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Strategy {
     Edit,
@@ -106,17 +108,37 @@ pub struct Target {
     pub strategy: Strategy,
     pub key_notation: Option<Notation>,
     pub paths: Vec<String>,
+    /// Dotted tool setting → action.
+    #[serde(default)]
+    pub keys: BTreeMap<String, String>,
+    /// Dotted tool setting → text with `{role}` placeholders, or a list of them.
+    #[serde(default)]
+    pub theme: BTreeMap<String, ThemeValue>,
+    /// Text of a `block` target, with `{role}` placeholders.
+    pub template: Option<String>,
 }
 
 impl Target {
     /// First existing path, else the first that expands (to be created).
     /// The bool is whether the file exists.
     pub fn resolve(&self) -> Option<(PathBuf, bool)> {
-        let candidates: Vec<PathBuf> = self.paths.iter().filter_map(|p| paths::expand(p)).collect();
+        let candidates = self.candidates();
         if let Some(existing) = candidates.iter().find(|p| p.exists()) {
             return Some((existing.clone(), true));
         }
         candidates.into_iter().next().map(|p| (p, false))
+    }
+
+    pub fn candidates(&self) -> Vec<PathBuf> {
+        self.paths.iter().filter_map(|p| paths::expand(p)).collect()
+    }
+
+    fn editable(&self) -> bool {
+        edit::supports(self.format, self.strategy)
+    }
+
+    fn empty(&self) -> bool {
+        self.keys.is_empty() && self.theme.is_empty() && self.template.is_none()
     }
 }
 
@@ -128,11 +150,8 @@ struct PortFile {
     versions: Option<String>,
     #[serde(default = "default_version_args")]
     version_args: Vec<String>,
-    target: Option<Target>,
     #[serde(default)]
-    keys: BTreeMap<String, String>,
-    #[serde(default)]
-    theme: BTreeMap<String, ThemeValue>,
+    target: Vec<Target>,
     notes: Option<String>,
 }
 
@@ -217,9 +236,7 @@ pub fn parse(name: &str, text: &str) -> Result<Port> {
             .parse()
             .with_context(|| format!("port {name}: versions {versions}"))?,
         version_args: file.version_args,
-        target: file.target,
-        keys: file.keys,
-        theme: file.theme,
+        targets: file.target,
         notes: file.notes,
     };
     validate(&port).with_context(|| format!("port {name}"))?;
@@ -273,24 +290,28 @@ fn validate_version_args(args: &[String]) -> Result<()> {
 /// Ports cannot define new actions or roles.
 fn validate(port: &Port) -> Result<()> {
     validate_version_args(&port.version_args)?;
-    if let Some(target) = &port.target {
-        target.paths.iter().try_for_each(|p| validate_path(p))?;
-    }
-    for action in port.keys.values() {
+    port.targets.iter().try_for_each(validate_target)
+}
+
+fn validate_target(target: &Target) -> Result<()> {
+    target.paths.iter().try_for_each(|p| validate_path(p))?;
+    for action in target.keys.values() {
         if !actions::is_action(action) {
             bail!("unknown action {action}");
         }
     }
-    let notation = port.target.as_ref().and_then(|t| t.key_notation);
-    if !port.keys.is_empty() && notation.is_none() {
+    if !target.keys.is_empty() && target.key_notation.is_none() {
         bail!("keys need a key_notation");
     }
-    for value in port.theme.values() {
-        let items = match value {
-            ThemeValue::One(s) => std::slice::from_ref(s),
-            ThemeValue::Many(items) => items.as_slice(),
-        };
-        for role in items.iter().filter_map(|s| palette::role_of(s)) {
+    if target.template.is_some() != (target.strategy == Strategy::Block) {
+        bail!("a template belongs to a block target, and a block target needs one");
+    }
+    let values = target.theme.values().flat_map(|value| match value {
+        ThemeValue::One(s) => std::slice::from_ref(s),
+        ThemeValue::Many(items) => items.as_slice(),
+    });
+    for text in values.chain(&target.template) {
+        for role in palette::placeholders(text) {
             if !palette::ROLES.contains(&role) {
                 bail!("unknown role {role}");
             }
@@ -299,9 +320,10 @@ fn validate(port: &Port) -> Result<()> {
     Ok(())
 }
 
-/// Port, input and expected text of every `tests/*.input.*` file.
+/// Target, input and expected text of every `tests/*.input.*` file. `keymap.input.toml`
+/// tests the target writing `keymap.toml`; a stem no target has tests the first.
 #[cfg(test)]
-pub fn golden_cases() -> Vec<(Port, &'static str, &'static str)> {
+pub fn golden_cases() -> Vec<(Port, Target, &'static str, &'static str)> {
     let mut cases = Vec::new();
     for tool in EMBEDDED.dirs() {
         let name = tool.path().to_string_lossy().into_owned();
@@ -321,7 +343,11 @@ pub fn golden_cases() -> Vec<(Port, &'static str, &'static str)> {
                         .and_then(|f| f.contents_utf8())
                         .unwrap_or_else(|| panic!("{path} has no expected file"));
                     let port = parse(&name, text).unwrap();
-                    cases.push((port, file.contents_utf8().unwrap(), expected));
+                    let test = stem.rsplit('/').next().unwrap();
+                    let writes = |t: &&Target| t.paths.iter().any(|p| file_stem(p) == Some(test));
+                    let target = port.targets.iter().find(writes).unwrap_or(&port.targets[0]);
+                    let target = target.clone();
+                    cases.push((port, target, file.contents_utf8().unwrap(), expected));
                 }
             }
         }
@@ -330,10 +356,15 @@ pub fn golden_cases() -> Vec<(Port, &'static str, &'static str)> {
 }
 
 #[cfg(test)]
+fn file_stem(path: &str) -> Option<&str> {
+    path.rsplit('/').next()?.split('.').next()
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
-    const YAML: &str = "schema = 1\nversion = \"1\"\nbinaries = []\n[target]\nformat = \"yaml\"\nstrategy = \"edit\"\nkey_notation = \"angle\"\npaths = []\n";
+    const YAML: &str = "schema = 1\nversion = \"1\"\nbinaries = []\n[[target]]\nformat = \"yaml\"\nstrategy = \"edit\"\nkey_notation = \"angle\"\npaths = []\n";
 
     static MULTI: Dir = include_dir!("$CARGO_MANIFEST_DIR/testdata/ports");
 
@@ -344,7 +375,7 @@ mod tests {
                 "binaries = []",
                 &format!("binaries = []\nversions = \"{versions}\""),
             );
-        parse("t", &format!("{text}[keys]\na = \"up\"\n")).unwrap()
+        parse("t", &format!("{text}[target.keys]\na = \"up\"\n")).unwrap()
     }
 
     fn pick(ports: &[Port], version: &str) -> (String, bool) {
@@ -449,26 +480,71 @@ mod tests {
 
     #[test]
     fn unknown_action_is_rejected() {
-        let err = parse("x", &format!("{YAML}[keys]\na = \"fly\"\n")).unwrap_err();
+        let err = parse("x", &format!("{YAML}[target.keys]\na = \"fly\"\n")).unwrap_err();
         assert!(format!("{err:#}").contains("unknown action fly"));
     }
 
     #[test]
     fn unknown_role_is_rejected() {
-        let err = parse("x", &format!("{YAML}[theme]\na = \"{{glow}}\"\n")).unwrap_err();
+        let err = parse("x", &format!("{YAML}[target.theme]\na = \"{{glow}}\"\n")).unwrap_err();
         assert!(format!("{err:#}").contains("unknown role glow"));
     }
 
     #[test]
     fn keys_need_a_notation() {
-        let text = "schema = 1\nversion = \"1\"\nbinaries = []\n[target]\nformat = \"yaml\"\nstrategy = \"edit\"\npaths = []\n[keys]\na = \"up\"\n";
+        let text = "schema = 1\nversion = \"1\"\nbinaries = []\n[[target]]\nformat = \"yaml\"\nstrategy = \"edit\"\npaths = []\n[target.keys]\na = \"up\"\n";
         let err = parse("x", text).unwrap_err();
         assert!(format!("{err:#}").contains("key_notation"));
     }
 
     #[test]
+    fn a_template_needs_a_block_target() {
+        let err = parse("x", &format!("{YAML}template = \"a\"\n")).unwrap_err();
+        assert!(format!("{err:#}").contains("template"));
+    }
+
+    #[test]
+    fn a_block_target_needs_a_template() {
+        let text = YAML.replace("\"edit\"", "\"block\"");
+        assert!(parse("x", &text).is_err());
+    }
+
+    #[test]
+    fn unknown_role_in_a_template_is_rejected() {
+        let text = YAML
+            .replace("\"edit\"", "\"block\"")
+            .replace("\"yaml\"", "\"lines\"");
+        let err = parse("x", &format!("{text}template = \"{{glow}}\"\n")).unwrap_err();
+        assert!(format!("{err:#}").contains("unknown role glow"));
+    }
+
+    #[test]
+    fn every_file_of_a_port_counts() {
+        let two = format!(
+            "{YAML}[target.keys]\na = \"up\"\n[[target]]\nformat = \"toml\"\nstrategy = \"edit\"\nkey_notation = \"angle\"\npaths = []\n[target.keys]\nb = \"yank\"\n[target.theme]\nc = \"{{accent}}\"\n"
+        );
+        let port = parse("x", &two).unwrap();
+        assert_eq!(port.targets.len(), 2);
+        assert_eq!(port.action_coverage().0, ["up", "yank"]);
+        assert_eq!(port.theme_settings(), 1);
+        assert!(port.writable());
+    }
+
+    #[test]
+    fn one_unusable_file_makes_the_port_unsupported() {
+        let two = format!(
+            "{YAML}[target.keys]\na = \"up\"\n[[target]]\nformat = \"json\"\nstrategy = \"edit\"\npaths = []\n[target.theme]\nc = \"x\"\n"
+        );
+        assert!(!parse("x", &two).unwrap().writable());
+    }
+
+    #[test]
     fn action_coverage_splits_the_vocabulary() {
-        let port = parse("x", &format!("{YAML}[keys]\na = \"up\"\nb = \"yank\"\n")).unwrap();
+        let port = parse(
+            "x",
+            &format!("{YAML}[target.keys]\na = \"up\"\nb = \"yank\"\n"),
+        )
+        .unwrap();
         let (bound, unbound) = port.action_coverage();
         assert_eq!(bound, ["up", "yank"]);
         assert_eq!(unbound, ["left", "down", "right", "delete"]);
@@ -485,10 +561,10 @@ mod tests {
     #[test]
     fn writable_needs_an_editor_and_mappings() {
         let empty = parse("x", YAML).unwrap();
-        let mapped = parse("x", &format!("{YAML}[keys]\na = \"up\"\n")).unwrap();
+        let mapped = parse("x", &format!("{YAML}[target.keys]\na = \"up\"\n")).unwrap();
         let json = parse(
             "x",
-            &format!("{YAML}[keys]\na = \"up\"\n").replace("\"yaml\"", "\"json\""),
+            &format!("{YAML}[target.keys]\na = \"up\"\n").replace("\"yaml\"", "\"json\""),
         )
         .unwrap();
 

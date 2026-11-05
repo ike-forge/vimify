@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
 
-use crate::edit::Value;
+use crate::edit::{self, Value};
 use crate::palette::{self, Palette};
-use crate::port::{Port, ThemeValue};
+use crate::port::{Target, ThemeValue};
 use crate::reference::Reference;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -11,21 +11,25 @@ pub struct Rendered {
     pub warnings: Vec<String>,
 }
 
-pub fn render(port: &Port, reference: &Reference, palette: &Palette) -> Result<Rendered> {
+pub fn render(
+    tool: &str,
+    target: &Target,
+    reference: &Reference,
+    palette: &Palette,
+) -> Result<Rendered> {
     let mut values = Vec::new();
     let mut warnings = Vec::new();
-    let notation = port.target.as_ref().and_then(|t| t.key_notation);
-    for (setting, action) in &port.keys {
+    for (setting, action) in &target.keys {
         let key = reference
             .keys
             .get(action)
             .with_context(|| format!("no key for action {action}"))?;
-        match notation.and_then(|n| n.convert(key)) {
+        match target.key_notation.and_then(|n| n.convert(key)) {
             Some(converted) => values.push((setting.clone(), Value::Str(converted))),
-            None => warnings.push(format!("{} cannot express key {key}", port.name)),
+            None => warnings.push(format!("{tool} cannot express key {key}")),
         }
     }
-    for (setting, value) in &port.theme {
+    for (setting, value) in &target.theme {
         let value = match value {
             ThemeValue::One(s) => Value::Str(fill(s, palette)?),
             ThemeValue::Many(items) => Value::List(
@@ -37,17 +41,21 @@ pub fn render(port: &Port, reference: &Reference, palette: &Palette) -> Result<R
         };
         values.push((setting.clone(), value));
     }
+    if let Some(template) = &target.template {
+        values.push((edit::BLOCK.to_owned(), Value::Str(fill(template, palette)?)));
+    }
     Ok(Rendered { values, warnings })
 }
 
 fn fill(value: &str, palette: &Palette) -> Result<String> {
-    match palette::role_of(value) {
-        Some(role) => palette
+    let mut filled = value.to_owned();
+    for role in palette::placeholders(value) {
+        let color = palette
             .role(role)
-            .map(str::to_owned)
-            .with_context(|| format!("no colour for role {role}")),
-        None => Ok(value.to_owned()),
+            .with_context(|| format!("no colour for role {role}"))?;
+        filled = filled.replace(&format!("{{{role}}}"), color);
     }
+    Ok(filled)
 }
 
 #[cfg(test)]
@@ -58,16 +66,16 @@ mod tests {
     fn render_port(text: &str, reference: &Reference) -> Rendered {
         let port = port::parse("t", text).unwrap();
         let palette = palette::load("catppuccin-frappe").unwrap();
-        render(&port, reference, &palette).unwrap()
+        render(&port.name, &port.targets[0], reference, &palette).unwrap()
     }
 
-    const TARGET: &str = "schema = 1\nversion = \"1\"\nbinaries = []\n[target]\nformat = \"yaml\"\nstrategy = \"edit\"\nkey_notation = \"angle\"\npaths = []\n";
+    const TARGET: &str = "schema = 1\nversion = \"1\"\nbinaries = []\n[[target]]\nformat = \"yaml\"\nstrategy = \"edit\"\nkey_notation = \"angle\"\npaths = []\n";
 
     #[test]
     fn keys_go_through_the_notation() {
         let mut reference = Reference::default();
         reference.keys.insert("down".into(), "<C-n>".into());
-        let text = format!("{TARGET}[keys]\n\"a.b\" = \"down\"\n");
+        let text = format!("{TARGET}[target.keys]\n\"a.b\" = \"down\"\n");
 
         let out = render_port(&text, &reference);
 
@@ -78,7 +86,7 @@ mod tests {
     fn inexpressible_key_is_skipped_with_a_warning() {
         let mut reference = Reference::default();
         reference.keys.insert("down".into(), "gg".into());
-        let text = format!("{TARGET}[keys]\n\"a.b\" = \"down\"\n");
+        let text = format!("{TARGET}[target.keys]\n\"a.b\" = \"down\"\n");
 
         let out = render_port(&text, &reference);
 
@@ -89,7 +97,7 @@ mod tests {
     #[test]
     fn theme_fills_roles_and_keeps_literals() {
         let text = format!(
-            "{TARGET}[theme]\n\"a.b\" = [\"{{accent}}\", \"bold\"]\nc = \"{{selection}}\"\n"
+            "{TARGET}[target.theme]\n\"a.b\" = [\"{{accent}}\", \"bold\"]\nc = \"{{selection}}\"\n"
         );
 
         let out = render_port(&text, &Reference::default());
@@ -103,6 +111,29 @@ mod tests {
                 ),
                 ("c".into(), Value::Str("#414559".into())),
             ]
+        );
+    }
+    #[test]
+    fn roles_fill_inside_text() {
+        let text = format!("{TARGET}[target.theme]\na = \"\\\"{{accent}}\\\"\"\n");
+
+        let out = render_port(&text, &Reference::default());
+
+        assert_eq!(out.values, [("a".into(), Value::Str("\"#8caaee\"".into()))]);
+    }
+
+    #[test]
+    fn a_template_renders_as_the_block() {
+        let text = TARGET
+            .replace("\"edit\"", "\"block\"")
+            .replace("\"yaml\"", "\"lines\"");
+        let text = format!("{text}template = \"bg {{base}}\"\n");
+
+        let out = render_port(&text, &Reference::default());
+
+        assert_eq!(
+            out.values,
+            [(edit::BLOCK.into(), Value::Str("bg #303446".into()))]
         );
     }
 }

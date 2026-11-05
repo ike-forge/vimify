@@ -2,8 +2,12 @@ schema = 1
 version = "0.1.0"
 # Debian and Ubuntu ship the binary as batcat.
 binaries = ["bat", "batcat"]
+versions = ">=0.25"
 
-[target]
+notes = "Theme only: bat has no keybindings, and pages through less. Syntax colours follow the terminal's palette: bat ships no Catppuccin theme, and a custom one needs `bat cache --build`."
+
+[[target]]
 format = "lines"
 strategy = "block"
 paths = ["$BAT_CONFIG_PATH", "$XDG_CONFIG_HOME/bat/config"]
+template = '--theme="ansi"'

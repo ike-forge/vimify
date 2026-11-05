@@ -1,0 +1,30 @@
+# Mine
+[mgr]
+cwd = { fg = "#8caaee" } # mine
+syntect_theme = "x.tmTheme"
+
+[mgr.border_style]
+fg = "#51576d"
+
+[status]
+overall = { bg = "black" }
+
+[indicator.current]
+bg = "#414559"
+fg = "#c6d0f5"
+
+[mode.normal_alt]
+bg = "#414559"
+fg = "#8caaee"
+
+[mode.normal_main]
+bg = "#8caaee"
+fg = "#303446"
+
+[tabs.active]
+bg = "#8caaee"
+fg = "#303446"
+
+[tabs.inactive]
+bg = "#414559"
+fg = "#8caaee"

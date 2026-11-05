@@ -1,9 +1,9 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::edit;
-use crate::port::Port;
-use crate::state::{self, Applied, State};
+use crate::port::{Port, Target};
+use crate::state::{self, Applied, AppliedFile, State};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Selection {
@@ -17,27 +17,28 @@ pub struct Op {
     pub action: Action,
 }
 
+/// `paths` of Apply, Create and Update line up with the port's targets.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Action {
     Apply {
-        path: PathBuf,
+        paths: Vec<PathBuf>,
     },
-    /// Target file does not exist yet.
+    /// No target file exists yet.
     Create {
-        path: PathBuf,
+        paths: Vec<PathBuf>,
     },
     /// Applied with an older port version, a different reference, or a key the user
     /// changed by hand.
     Update {
-        path: PathBuf,
+        paths: Vec<PathBuf>,
         manual: bool,
     },
     Revert {
-        path: PathBuf,
+        paths: Vec<PathBuf>,
         manual: bool,
     },
     Current {
-        path: PathBuf,
+        paths: Vec<PathBuf>,
     },
     /// Port has no editor or mappings yet.
     Unsupported,
@@ -55,14 +56,14 @@ impl Action {
         }
     }
 
-    pub fn path(&self) -> Option<&Path> {
+    pub fn paths(&self) -> &[PathBuf] {
         match self {
-            Action::Apply { path }
-            | Action::Create { path }
-            | Action::Update { path, .. }
-            | Action::Revert { path, .. }
-            | Action::Current { path } => Some(path),
-            Action::Unsupported => None,
+            Action::Apply { paths }
+            | Action::Create { paths }
+            | Action::Update { paths, .. }
+            | Action::Revert { paths, .. }
+            | Action::Current { paths } => paths,
+            Action::Unsupported => &[],
         }
     }
 
@@ -83,26 +84,9 @@ impl Action {
 pub fn plan(selection: &Selection, ports: &[Port], state: &State, reference_hash: &str) -> Vec<Op> {
     let selected = selection.selected.iter().filter_map(|tool| {
         let port = ports.iter().find(|p| &p.name == tool)?;
-        let action = match (state.tools.get(tool), &port.target) {
-            (Some(a), _) => {
-                let manual = edited_by_hand(a);
-                if manual || a.port_version != port.version || a.reference_hash != reference_hash {
-                    Action::Update {
-                        path: a.path.clone(),
-                        manual,
-                    }
-                } else {
-                    Action::Current {
-                        path: a.path.clone(),
-                    }
-                }
-            }
-            (None, Some(target)) if port.writable() => match target.resolve() {
-                Some((path, true)) => Action::Apply { path },
-                Some((path, false)) => Action::Create { path },
-                None => Action::Unsupported,
-            },
-            (None, _) => Action::Unsupported,
+        let action = match state.tools.get(tool) {
+            Some(a) => update(a, port, reference_hash),
+            None => fresh(port),
         };
         Some(Op {
             tool: tool.clone(),
@@ -114,7 +98,7 @@ pub fn plan(selection: &Selection, ports: &[Port], state: &State, reference_hash
         Some(Op {
             tool: tool.clone(),
             action: Action::Revert {
-                path: applied.path.clone(),
+                paths: applied.paths(),
                 manual: edited_by_hand(applied),
             },
         })
@@ -122,19 +106,67 @@ pub fn plan(selection: &Selection, ports: &[Port], state: &State, reference_hash
     selected.chain(reverted).collect()
 }
 
+fn fresh(port: &Port) -> Action {
+    if !port.writable() {
+        return Action::Unsupported;
+    }
+    let resolved: Option<Vec<_>> = port.targets.iter().map(|t| t.resolve()).collect();
+    let Some(resolved) = resolved else {
+        return Action::Unsupported;
+    };
+    let any_exists = resolved.iter().any(|(_, exists)| *exists);
+    let paths = resolved.into_iter().map(|(path, _)| path).collect();
+    if any_exists {
+        Action::Apply { paths }
+    } else {
+        Action::Create { paths }
+    }
+}
+
+fn update(applied: &Applied, port: &Port, reference_hash: &str) -> Action {
+    let manual = edited_by_hand(applied);
+    if !manual && applied.port_version == port.version && applied.reference_hash == reference_hash {
+        return Action::Current {
+            paths: applied.paths(),
+        };
+    }
+    if !port.writable() {
+        return Action::Unsupported;
+    }
+    let paths: Option<Vec<_>> = port.targets.iter().map(|t| keep_path(applied, t)).collect();
+    match paths {
+        Some(paths) => Action::Update { paths, manual },
+        None => Action::Unsupported,
+    }
+}
+
+/// The file already holding this target, else where a target new to the port goes.
+fn keep_path(applied: &Applied, target: &Target) -> Option<PathBuf> {
+    let candidates = target.candidates();
+    let kept = applied.files.iter().find(|f| candidates.contains(&f.path));
+    match kept {
+        Some(file) => Some(file.path.clone()),
+        None => target.resolve().map(|(path, _)| path),
+    }
+}
+
 /// Whether an owned key differs from what vimify wrote. Edits to anything else do not
 /// count, nor does a tool rewriting its own config. A file vimify cannot read counts.
 fn edited_by_hand(applied: &Applied) -> bool {
-    let Ok(text) = fs::read_to_string(&applied.path) else {
+    applied.files.iter().any(file_edited_by_hand)
+}
+
+fn file_edited_by_hand(file: &AppliedFile) -> bool {
+    let Ok(text) = fs::read_to_string(&file.path) else {
         return true;
     };
-    if state::hash(text.as_bytes()) == applied.file_hash {
+    if state::hash(text.as_bytes()) == file.file_hash {
         return false;
     }
-    let Ok(editor) = edit::open(applied.format, &text) else {
+    let Ok(editor) = edit::open(file.format, file.strategy, &text) else {
         return true;
     };
-    applied.owned.iter().any(|(setting, value)| {
+    file.owned.iter().any(|(setting, value)| {
         let path: Vec<&str> = setting.split('.').collect();
         editor.get(&path).as_ref() != Some(value)
     })
@@ -160,6 +192,7 @@ mod tests {
     use crate::edit::Value;
     use crate::port::{Format, Strategy, Target};
     use std::collections::BTreeMap;
+    use std::path::Path;
     use tempfile::TempDir;
 
     const REF: &str = "ref";
@@ -171,15 +204,20 @@ mod tests {
             binaries: vec![name.into()],
             versions: semver::VersionReq::STAR,
             version_args: vec![],
-            target: paths.map(|paths| Target {
-                format: Format::Yaml,
-                strategy: Strategy::Edit,
-                key_notation: Some(Notation::Angle),
-                paths,
-            }),
+            targets: paths.map(target).into_iter().collect(),
+            notes: None,
+        }
+    }
+
+    fn target(paths: Vec<String>) -> Target {
+        Target {
+            format: Format::Yaml,
+            strategy: Strategy::Edit,
+            key_notation: Some(Notation::Angle),
+            paths,
             keys: BTreeMap::from([("a.b".into(), "down".into())]),
             theme: BTreeMap::new(),
-            notes: None,
+            template: None,
         }
     }
 
@@ -205,12 +243,15 @@ mod tests {
             tool.into(),
             Applied {
                 port_version: version.into(),
-                path: path.clone(),
-                backup: None,
                 reference_hash: REF.into(),
-                file_hash: state::hash(CONFIG.as_bytes()),
-                format: Format::Yaml,
-                owned: BTreeMap::from([("a.b".into(), Value::Str("j".into()))]),
+                files: vec![AppliedFile {
+                    path: path.clone(),
+                    backup: None,
+                    file_hash: state::hash(CONFIG.as_bytes()),
+                    format: Format::Yaml,
+                    strategy: Strategy::Edit,
+                    owned: BTreeMap::from([("a.b".into(), Value::Str("j".into()))]),
+                }],
             },
         );
         (state, path)
@@ -236,8 +277,18 @@ mod tests {
         assert_eq!(
             actions(ops),
             [
-                ("a".into(), Action::Apply { path: existing }),
-                ("b".into(), Action::Create { path: missing }),
+                (
+                    "a".into(),
+                    Action::Apply {
+                        paths: vec![existing]
+                    }
+                ),
+                (
+                    "b".into(),
+                    Action::Create {
+                        paths: vec![missing]
+                    }
+                ),
             ]
         );
     }
@@ -260,7 +311,12 @@ mod tests {
             REF,
         );
 
-        assert_eq!(ops[0].action, Action::Apply { path: second });
+        assert_eq!(
+            ops[0].action,
+            Action::Apply {
+                paths: vec![second]
+            }
+        );
     }
 
     #[test]
@@ -277,9 +333,9 @@ mod tests {
     #[test]
     fn port_vimify_cannot_write_is_unsupported() {
         let mut unmapped = port("a", "1", Some(vec!["/c".into()]));
-        unmapped.keys.clear();
+        unmapped.targets[0].keys.clear();
         let mut no_editor = port("b", "1", Some(vec!["/c".into()]));
-        no_editor.target.as_mut().unwrap().format = Format::Json;
+        no_editor.targets[0].format = Format::Json;
 
         let ops = plan(
             &selection(&["a", "b"], &[]),
@@ -292,16 +348,16 @@ mod tests {
         assert_eq!(ops[1].action, Action::Unsupported);
     }
 
-    fn update(path: &Path, manual: bool) -> Action {
+    fn updated(path: &Path, manual: bool) -> Action {
         Action::Update {
-            path: path.to_owned(),
+            paths: vec![path.to_owned()],
             manual,
         }
     }
 
     fn revert(path: &Path, manual: bool) -> Action {
         Action::Revert {
-            path: path.to_owned(),
+            paths: vec![path.to_owned()],
             manual,
         }
     }
@@ -313,7 +369,9 @@ mod tests {
         } else {
             selection(&[], names)
         };
-        let mut ops = plan(&sel, &[port("a", "2", None)], state, reference);
+        let path = state.tools["a"].files[0].path.to_str().unwrap().to_owned();
+        let port = port("a", "2", Some(vec![path]));
+        let mut ops = plan(&sel, &[port], state, reference);
         ops.remove(0).action
     }
 
@@ -325,16 +383,18 @@ mod tests {
 
         assert_eq!(
             one(true, &same, REF),
-            Action::Current { path: path.clone() }
+            Action::Current {
+                paths: vec![path.clone()]
+            }
         );
-        assert_eq!(one(true, &older, REF), update(&path, false));
+        assert_eq!(one(true, &older, REF), updated(&path, false));
     }
 
     #[test]
     fn changed_reference_updates_applied_tool() {
         let dir = TempDir::new().unwrap();
         let (state, path) = applied(&dir, "a", "2");
-        assert_eq!(one(true, &state, "other"), update(&path, false));
+        assert_eq!(one(true, &state, "other"), updated(&path, false));
     }
 
     #[test]
@@ -345,7 +405,9 @@ mod tests {
 
         assert_eq!(
             one(true, &state, REF),
-            Action::Current { path: path.clone() }
+            Action::Current {
+                paths: vec![path.clone()]
+            }
         );
         assert_eq!(one(false, &state, REF), revert(&path, false));
     }
@@ -356,7 +418,7 @@ mod tests {
         let (state, path) = applied(&dir, "a", "2");
         fs::write(&path, "a:\n  b: x\nc: 1\n").unwrap();
 
-        assert_eq!(one(true, &state, REF), update(&path, true));
+        assert_eq!(one(true, &state, REF), updated(&path, true));
         assert_eq!(one(false, &state, REF), revert(&path, true));
     }
 
@@ -366,7 +428,7 @@ mod tests {
         let (state, path) = applied(&dir, "a", "2");
         fs::write(&path, "c: 1\n").unwrap();
 
-        assert_eq!(one(true, &state, REF), update(&path, true));
+        assert_eq!(one(true, &state, REF), updated(&path, true));
     }
 
     #[test]
@@ -375,9 +437,77 @@ mod tests {
         let (state, path) = applied(&dir, "a", "2");
 
         fs::write(&path, "- not a mapping\n").unwrap();
-        assert_eq!(one(true, &state, REF), update(&path, true));
+        assert_eq!(one(true, &state, REF), updated(&path, true));
         fs::remove_file(&path).unwrap();
-        assert_eq!(one(true, &state, REF), update(&path, true));
+        assert_eq!(one(true, &state, REF), updated(&path, true));
+    }
+
+    #[test]
+    fn a_tool_with_any_existing_file_is_applied() {
+        let dir = TempDir::new().unwrap();
+        let existing = dir.path().join("existing.yml");
+        fs::write(&existing, "").unwrap();
+        let missing = dir.path().join("missing.yml");
+        let mut two = port("a", "1", Some(vec![existing.to_str().unwrap().into()]));
+        two.targets
+            .push(target(vec![missing.to_str().unwrap().into()]));
+
+        let ops = plan(&selection(&["a"], &[]), &[two], &State::default(), REF);
+
+        assert_eq!(
+            ops[0].action,
+            Action::Apply {
+                paths: vec![existing, missing]
+            }
+        );
+    }
+
+    #[test]
+    fn one_unresolvable_file_makes_the_tool_unsupported() {
+        let mut two = port("a", "1", Some(vec!["/c".into()]));
+        two.targets
+            .push(target(vec!["$VIMIFY_TEST_UNSET/c".into()]));
+
+        let ops = plan(&selection(&["a"], &[]), &[two], &State::default(), REF);
+
+        assert_eq!(ops[0].action, Action::Unsupported);
+    }
+
+    #[test]
+    fn an_update_reaches_a_file_new_to_the_port() {
+        let dir = TempDir::new().unwrap();
+        let (state, path) = applied(&dir, "a", "1");
+        let added = dir.path().join("added.yml");
+        let mut two = port("a", "2", Some(vec![path.to_str().unwrap().into()]));
+        two.targets
+            .push(target(vec![added.to_str().unwrap().into()]));
+
+        let ops = plan(&selection(&["a"], &[]), &[two], &state, REF);
+
+        assert_eq!(
+            ops[0].action,
+            Action::Update {
+                paths: vec![path, added],
+                manual: false
+            }
+        );
+    }
+
+    #[test]
+    fn a_manual_edit_in_any_file_counts() {
+        let dir = TempDir::new().unwrap();
+        let (mut state, _) = applied(&dir, "a", "2");
+        let other = dir.path().join("other.yml");
+        fs::write(&other, "a:\n  b: x\n").unwrap();
+        let mut second = state.tools["a"].files[0].clone();
+        second.path = other.clone();
+        second.file_hash = "written".into();
+        state.tools.get_mut("a").unwrap().files.push(second);
+
+        let ops = plan(&selection(&[], &["a"]), &[], &state, REF);
+
+        assert!(ops[0].action.manual());
+        assert_eq!(ops[0].action.paths()[1], other);
     }
 
     #[test]

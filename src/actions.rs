@@ -19,6 +19,8 @@ pub fn is_action(name: &str) -> bool {
 pub enum Notation {
     Angle,
     Tcell,
+    /// The tool spells keys as the reference does.
+    Vim,
 }
 
 impl Notation {
@@ -27,6 +29,7 @@ impl Notation {
         match self {
             Notation::Angle => angle(key),
             Notation::Tcell => tcell(key),
+            Notation::Vim => Some(key.to_owned()),
         }
     }
 }

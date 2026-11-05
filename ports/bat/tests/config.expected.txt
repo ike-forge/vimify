@@ -1,0 +1,6 @@
+# My bat setup
+--style="numbers"
+--paging=never
+# >>> vimify >>>
+--theme="ansi"
+# <<< vimify <<<

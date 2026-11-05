@@ -56,12 +56,17 @@ ports/lazygit/
     default.expected.yml
 ```
 
+A port is a list of targets, one per file. Each holds its own settings, so a config
+split across files works as different keys of one file does: same plan, state, backup
+and revert. A tool applies whole. Every file is computed first, and a failed write
+puts back the ones already written.
+
 ```toml
 schema = 1
 version = "0.1.0"
 binaries = ["lazygit"]
 
-[target]
+[[target]]
 format = "yaml"            # toml | yaml | json | lines
 strategy = "edit"          # edit | block | include
 key_notation = "angle"     # how the tool spells <C-u>
@@ -72,33 +77,34 @@ paths = [                  # first existing wins; first resolvable is created
 ]
 
 # The -alt slots: the primary ones hold the arrow keys, which must keep working.
-[keys]
+[target.keys]
 "keybinding.universal.prevItem-alt" = "up"
 "keybinding.universal.nextItem-alt" = "down"
 "keybinding.universal.prevBlock-alt" = "left"
 "keybinding.universal.nextBlock-alt" = "right"
 
-[theme]
+[target.theme]
 "gui.theme.activeBorderColor" = ["{accent}", "bold"]
 "gui.theme.selectedLineBgColor" = ["{selection}"]
 ```
 
-`lines` ports (`block`/`include` strategies) use text templates instead of key
-paths:
+`{role}` fills anywhere in a value (`'"{accent}"'`), for tools that want it quoted.
+Golden tests pick their target by file stem: `theme.input.toml` tests the target
+writing `theme.toml`. Any other stem tests the first target.
+
+TOML settings reach into arrays of inline tables by a field of the entry:
+`"mgr.prepend_keymap[run=arrow next].on" = "down"`. A missing entry is appended, after
+the user's, and revert takes it back out.
+
+`lines` targets edit `key = value` lines, with values verbatim. A `block` target is
+one template instead of settings:
 
 ```toml
-[target]
+[[target]]
 format = "lines"
-strategy = "include"
-paths = ["$XDG_CONFIG_HOME/kitty/kitty.conf"]
-include_file = "$XDG_CONFIG_HOME/kitty/vimify.conf"
-include_line = "include vimify.conf"
-
-template = """
-map {keys.down} scroll_line_down
-map {keys.up} scroll_line_up
-selection_background {selection}
-"""
+strategy = "block"
+paths = ["$XDG_CONFIG_HOME/bat/config"]
+template = '--theme="ansi"'
 ```
 
 ### Sources and versioning
@@ -145,7 +151,7 @@ A key the notation cannot express skips that binding with a warning.
 | --------- | -------------------------------------------- | ------------------------------ |
 | `edit`    | Owned key paths in place, via format editor  | Restore owned keys             |
 | `block`   | Region between `# >>> vimify >>>` markers    | Remove block                   |
-| `include` | Own file + one include line in the tool file | Delete own file, remove line   |
+| `include` | Not implemented: no port needs it yet        |                                |
 
 Format editors share one trait so `yaml-edit` stays swappable
 ([stack.md](stack.md#tool-config-editing)):
@@ -153,9 +159,13 @@ Format editors share one trait so `yaml-edit` stays swappable
 ```rust
 trait Editor {
     fn set(&mut self, path: &[&str], value: Value) -> Result<()>;
+    fn get(&self, path: &[&str]) -> Option<Value>;
+    fn restore(&mut self, path: &[&str], original: &str) -> Result<()>;
     fn render(&self) -> String;
 }
 ```
+
+A block is an editor too, with its text as the one owned setting.
 
 ### Backups and state
 
@@ -175,15 +185,15 @@ trait Editor {
   edited file reverts key by key: each owned key takes its value from the first
   backup, or goes away with any parent vimify created. Other edits survive.
 - Writes are atomic (temp file + rename), through symlinks.
-- State lives in `~/.local/state/vimify/state.toml`, per tool: port version,
-  target path, backup path, hash of the reference used, hash of the file after
-  apply, format, and each owned key with the value written.
+- State lives in `~/.local/state/vimify/state.toml`, per tool: port version, hash
+  of the reference used, and per file its path, backup path, hash after apply,
+  format, strategy, and each owned key with the value written.
 - The reference hash covers `theme` and `keys` only. `exclusions` live in the same
   file and change on every selection, so they must not trigger a re-apply.
 - An owned key differing from the value written = `modified`. Edits to anything
   else do not count, nor does a tool rewriting its own config. The tool plans as
   `update` or `revert`, and the confirm screen lists it as updated manually, to
-  force. `block`/`include` reverts are unaffected.
+  force. Editing a block counts; lines around it do not.
 
 ## Crate layout
 
@@ -200,7 +210,7 @@ src/
   scan.rs       scan dirs, detection, progress events
   plan.rs       desired state × state → ops
   render.rs     port + reference → values / template text
-  edit/         Editor impls: toml, yaml, json, lines
+  edit/         Editor impls: toml, yaml, lines, block
   backup.rs     copy to first free .bak name
   apply.rs      strategies, atomic write, revert
   state.rs      applied-state store
@@ -219,6 +229,4 @@ src/
 
 ## Open questions
 
-- Multi-file targets: yazi splits `keymap.toml` and `theme.toml`, and its
-  keymaps are arrays of `{ on, run }`, not key paths.
 - RON (gitui `key_bindings.ron`, `theme.ron`): no format-preserving editor.

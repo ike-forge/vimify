@@ -4,7 +4,7 @@ binaries = ["lazysql"]
 versions = ">=0.7"
 notes = "left and right are not mapped: H and L switch panes, and h and l move between cells."
 
-[target]
+[[target]]
 format = "toml"
 strategy = "edit"
 key_notation = "tcell"
@@ -12,7 +12,7 @@ paths = ["$XDG_CONFIG_HOME/lazysql/config.toml"]
 
 # A binding replaces a command's first key only, which is the vim one: arrows survive.
 # `left` and `right` are unmapped: H and L switch panes, and h and l move table cells.
-[keys]
+[target.keys]
 "keymap.Tree.MoveDown" = "down"
 "keymap.Tree.MoveUp" = "up"
 "keymap.Sidebar.MoveDown" = "down"
@@ -26,7 +26,7 @@ paths = ["$XDG_CONFIG_HOME/lazysql/config.toml"]
 "keymap.QueryHistory.Delete" = "delete"
 "keymap.JSONViewer.Copy" = "yank"
 
-[theme]
+[target.theme]
 "theme.Colors.PrimitiveBackground" = "{base}"
 "theme.Colors.ContrastBackground" = "{selection}"
 "theme.Colors.MoreContrastBackground" = "{surface}"

@@ -5,7 +5,7 @@ versions = ">=0.25"
 
 notes = "Theme only: lazydocker has no configurable keybindings."
 
-[target]
+[[target]]
 format = "yaml"
 strategy = "edit"
 paths = [
@@ -14,7 +14,7 @@ paths = [
   "~/Library/Application Support/jesseduffield/lazydocker/config.yml",
 ]
 
-[theme]
+[target.theme]
 "gui.theme.activeBorderColor" = ["{accent}", "bold"]
 "gui.theme.inactiveBorderColor" = ["{border}"]
 "gui.theme.selectedLineBgColor" = ["{selection}"]

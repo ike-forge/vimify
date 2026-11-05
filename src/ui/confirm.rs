@@ -83,7 +83,8 @@ impl ConfirmScreen {
                 Action::Revert { .. } => Style::new().red(),
                 Action::Current { .. } | Action::Unsupported => Style::new().dim(),
             };
-            let detail = match op.action.path() {
+            let paths = op.action.paths();
+            let detail = match paths.first() {
                 Some(path) => Span::from(paths::display(path)).dim(),
                 None => Span::from("not supported yet").dim(),
             };
@@ -96,7 +97,12 @@ impl ConfirmScreen {
                 let force = format!("  updated manually, force {}", op.action.label());
                 spans.push(Span::from(force).red());
             }
-            ListItem::new(Line::from(spans))
+            let rest = paths.iter().skip(1).map(|path| {
+                let indent = " ".repeat(12 + width + 2);
+                Line::from(format!("{indent}{}", paths::display(path)).dim())
+            });
+            let lines: Vec<Line> = std::iter::once(Line::from(spans)).chain(rest).collect();
+            ListItem::new(lines)
         }))
     }
 }

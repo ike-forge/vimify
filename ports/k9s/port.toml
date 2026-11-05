@@ -2,9 +2,65 @@ schema = 1
 version = "0.1.0"
 binaries = ["k9s"]
 version_args = ["version", "-s"]
+versions = ">=0.40"
 
-# Theme is a skin file (skins/<name>.yaml) selected by k9s.ui.skin.
-[target]
+notes = "Theme only: k9s has no navigation keymap, and already takes j and k. A skin set per cluster or context wins over this one."
+
+# A skin is its own file, selected by k9s.ui.skin.
+[[target]]
 format = "yaml"
 strategy = "edit"
-paths = ["$K9S_CONFIG_DIR/config.yaml", "$XDG_CONFIG_HOME/k9s/config.yaml"]
+paths = [
+  "$K9S_CONFIG_DIR/config.yaml",
+  "$XDG_CONFIG_HOME/k9s/config.yaml",
+  "~/Library/Application Support/k9s/config.yaml",
+]
+
+[target.theme]
+"k9s.ui.skin" = "vimify"
+
+[[target]]
+format = "yaml"
+strategy = "edit"
+paths = [
+  "$K9S_CONFIG_DIR/skins/vimify.yaml",
+  "$XDG_CONFIG_HOME/k9s/skins/vimify.yaml",
+  "~/Library/Application Support/k9s/skins/vimify.yaml",
+]
+
+[target.theme]
+"k9s.body.fgColor" = "{text}"
+"k9s.body.bgColor" = "default"
+"k9s.body.logoColor" = "{accent}"
+"k9s.prompt.fgColor" = "{text}"
+"k9s.prompt.bgColor" = "default"
+"k9s.prompt.suggestColor" = "{muted}"
+"k9s.info.fgColor" = "{accent}"
+"k9s.info.sectionColor" = "{text}"
+"k9s.frame.border.fgColor" = "{border}"
+"k9s.frame.border.focusColor" = "{accent}"
+"k9s.frame.menu.fgColor" = "{text}"
+"k9s.frame.menu.keyColor" = "{accent}"
+"k9s.frame.menu.numKeyColor" = "{accent}"
+"k9s.frame.crumbs.fgColor" = "{base}"
+"k9s.frame.crumbs.bgColor" = "{accent}"
+"k9s.frame.crumbs.activeColor" = "{special}"
+"k9s.frame.status.newColor" = "{accent}"
+"k9s.frame.status.modifyColor" = "{special}"
+"k9s.frame.status.addColor" = "{success}"
+"k9s.frame.status.errorColor" = "{error}"
+"k9s.frame.status.highlightColor" = "{warning}"
+"k9s.frame.status.killColor" = "{muted}"
+"k9s.frame.status.completedColor" = "{muted}"
+"k9s.frame.title.fgColor" = "{text}"
+"k9s.frame.title.bgColor" = "default"
+"k9s.frame.title.highlightColor" = "{warning}"
+"k9s.frame.title.counterColor" = "{special}"
+"k9s.frame.title.filterColor" = "{accent}"
+"k9s.views.table.fgColor" = "{text}"
+"k9s.views.table.bgColor" = "default"
+"k9s.views.table.cursorFgColor" = "{text}"
+"k9s.views.table.cursorBgColor" = "{selection}"
+"k9s.views.table.header.fgColor" = "{accent}"
+"k9s.views.table.header.bgColor" = "default"
+"k9s.views.table.header.sorterColor" = "{warning}"

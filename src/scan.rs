@@ -249,11 +249,9 @@ mod tests {
             name: name.into(),
             version: "0".into(),
             binaries: binaries.iter().map(|b| b.to_string()).collect(),
-            target: None,
+            targets: Vec::new(),
             versions: VersionReq::STAR,
             version_args: Vec::new(),
-            keys: Default::default(),
-            theme: Default::default(),
             notes: None,
         }
     }
