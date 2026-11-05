@@ -5,6 +5,10 @@ kind = "0.33.0"
 [tasks.build]
 run = "cargo build --release"
 
+[tasks.install]
+description = "Build the release binary and link it into ~/.local/bin as `vimify-local`, alongside the brew binary"
+run = "cargo build --release && mkdir -p ~/.local/bin && ln -sf $PWD/target/release/vimify ~/.local/bin/vimify-local"
+
 [tasks.run]
 run = "cargo run --"
 
