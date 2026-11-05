@@ -37,7 +37,6 @@ pub struct Detection {
 
 #[derive(Debug)]
 pub enum Event {
-    Ports(Vec<Port>),
     Scanned { done: usize, dir: PathBuf },
     Found(Detection),
     Version { port: String, version: Version },
@@ -54,19 +53,10 @@ pub fn resolve_dirs<'a>(raw: impl IntoIterator<Item = &'a str>) -> Vec<PathBuf> 
         .collect()
 }
 
-/// `refresh` updates the ports first: it decides which binaries the scan looks for.
-pub fn spawn(
-    dirs: Vec<PathBuf>,
-    ports: Vec<Port>,
-    refresh: fn(Vec<Port>) -> Vec<Port>,
-) -> Receiver<Event> {
+pub fn spawn(dirs: Vec<PathBuf>, ports: Vec<Port>) -> Receiver<Event> {
     let (tx, rx) = mpsc::channel();
     // Send fails only once the UI has quit.
-    thread::spawn(move || {
-        let ports = refresh(ports);
-        tx.send(Event::Ports(ports.clone()))?;
-        scan(&dirs, &ports, &tx)
-    });
+    thread::spawn(move || scan(&dirs, &ports, &tx));
     rx
 }
 

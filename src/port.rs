@@ -256,8 +256,8 @@ const FORBIDDEN_VARS: &[&str] = &[
     "XDG_STATE_HOME",
 ];
 
-/// Ports arrive over the network, so a port must not reach arbitrary files. This bounds
-/// the damage; it does not replace reviewing what a port writes.
+/// A port must not reach arbitrary files. This bounds the damage; it does not replace
+/// reviewing what a port writes.
 fn validate_path(path: &str) -> Result<()> {
     if path.split('/').any(|segment| segment == "..") {
         bail!("path {path} leaves its directory");

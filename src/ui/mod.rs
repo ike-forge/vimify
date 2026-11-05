@@ -11,7 +11,6 @@ use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, Ke
 
 use crate::plan::{self, Op};
 use crate::port::Port;
-use crate::registry;
 use crate::state::State;
 use confirm::{Choice, ConfirmScreen};
 use scan::ScanScreen;
@@ -21,7 +20,7 @@ use select::SelectScreen;
 pub struct Outcome {
     pub ops: Vec<Op>,
     pub exclusions: Vec<String>,
-    /// The port each detected tool resolved to, after refreshing.
+    /// The port each detected tool resolved to.
     pub ports: Vec<Port>,
 }
 
@@ -56,19 +55,16 @@ pub fn run(
 fn event_loop(
     terminal: &mut DefaultTerminal,
     dirs: Vec<PathBuf>,
-    mut ports: Vec<Port>,
+    ports: Vec<Port>,
     exclusions: &[String],
     state: &State,
     reference_hash: &str,
 ) -> Result<Option<Outcome>> {
     let mut screen = Screen::Scan(ScanScreen::new(dirs.len()));
-    let rx = crate::scan::spawn(dirs, ports.clone(), registry::refresh);
+    let rx = crate::scan::spawn(dirs, ports.clone());
     loop {
         if let Screen::Scan(scan) = &mut screen {
             while let Ok(ev) = rx.try_recv() {
-                if let crate::scan::Event::Ports(fresh) = &ev {
-                    ports = fresh.clone();
-                }
                 scan.update(ev);
             }
             if scan.finished() && !scan.found().is_empty() {

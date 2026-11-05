@@ -17,7 +17,7 @@ set -g status off
 C
 t() { tmux -L vimify-shots -f "$work/tmux.conf" "$@"; }
 env_=(env HOME="$work/home" XDG_CONFIG_HOME="$work/home/.config" XDG_STATE_HOME="$work/home/.state"
-  XDG_CACHE_HOME="$work/home/.cache" VIMIFY_PORTS_URL= COLORTERM=truecolor TERM=tmux-256color)
+  XDG_CACHE_HOME="$work/home/.cache" COLORTERM=truecolor TERM=tmux-256color)
 
 # shoot NAME TITLE: capture the pane of session $NAME and render it.
 shoot() {

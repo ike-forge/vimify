@@ -60,9 +60,7 @@ user also customises them outside vimify.
 Each supported tool has a mapping that translates the reference config into that
 tool's config format and location.
 
-- Ports live in this repository and are added by PR. vimify fetches them at
-  startup, so a new port does not need a vimify release, and ships a copy for
-  offline use.
+- Ports live in this repository and ship inside the binary.
 
 ## Ideas
 

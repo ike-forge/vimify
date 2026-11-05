@@ -110,13 +110,7 @@ template = '--theme="ansi"'
 ### Sources and versioning
 
 - `ports/` is embedded at build time (`include_dir`), so vimify works offline.
-- CI publishes every port as one file to the `ports-bundle` branch. A committed
-  bundle would conflict on every port PR. Startup fetches it with an ETag and a
-  2 second timeout, and caches it in `~/.cache/vimify`. For every tool the bundle
-  covers, it replaces the embedded ports. `VIMIFY_PORTS_URL` overrides the URL;
-  empty turns updates off.
-- A bundle port this build cannot read is skipped, so a newer `schema` does not
-  break an older vimify.
+- Ports change only with a vimify release. Fetching them separately is not built.
 - `schema` gates the port format. vimify rejects ports with an unknown schema.
 
 A port covers a range of tool versions: `versions = ">=0.40, <0.60"`, default all.
@@ -133,7 +127,7 @@ The scan runs `version_args` (default `--version`) and takes the first dotted nu
 Ports always lag releases, so being outside a range is not worth a warning by itself.
 A tool crossing into another port plans as `update`, because the port version differs.
 
-Ports arrive over the network, so `port.toml` is checked on load: `paths` stay in
+`port.toml` is checked on load: `paths` stay in
 config locations and `version_args` are plain words. Neither replaces review: a
 config can run commands, and that is only visible by reading the port.
 

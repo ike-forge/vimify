@@ -4,8 +4,6 @@
 set -u
 
 export LANG=C.UTF-8
-# Tests must not depend on GitHub. test_remote_* serve their own bundle.
-export VIMIFY_PORTS_URL=
 
 CFG=~/.config/lazygit/config.yml
 STATE=~/.local/state/vimify/state.toml
@@ -360,70 +358,6 @@ test_versions_are_detected_and_shown() {
   on_screen 'btop .*1\.3\.2 .*supported'
   on_screen 'gitui .*0\.28\.1 .*not supported yet'
   close
-}
-
-# A bundle that moves lazygit to another major, and gives gitui a port it lacks.
-serve_bundle() {
-  mkdir -p /tmp/www
-  {
-    echo '[[port]]'
-    echo 'tool = "lazygit"'
-    echo "text = '''"
-    sed 's/^versions = .*/versions = ">=5.0"/' /tmp/lazygit.port.toml
-    echo "'''"
-    echo '[[port]]'
-    echo 'tool = "gitui"'
-    echo "text = '''"
-    printf '%s\n' 'schema = 1' 'version = "9"' 'binaries = ["gitui"]' 'versions = ">=0.1"' \
-      '[[target]]' 'format = "yaml"' 'strategy = "edit"' \
-      'paths = ["$XDG_CONFIG_HOME/gitui/from-bundle.yml"]' \
-      '[target.theme]' '"a.b" = "{accent}"'
-    echo "'''"
-  } >/tmp/www/ports.toml
-  (cd /tmp/www && exec python3 -m http.server 8765 --bind 127.0.0.1) >/dev/null 2>&1 &
-  server=$!
-  local tries=50
-  until bash -c '</dev/tcp/127.0.0.1/8765' 2>/dev/null; do
-    tries=$((tries - 1))
-    [ "$tries" = 0 ] && { fail 'bundle server did not start'; return 1; }
-    sleep 0.1
-  done
-}
-
-stop_bundle() { kill "$server" 2>/dev/null; wait "$server" 2>/dev/null; }
-
-select_screen() {
-  close
-  tmux -u new-session -d -s app -x 150 -y 40 'vimify 2>&1; sleep 60'
-  wait_for 'apply to all'
-}
-
-test_remote_ports_apply_and_keep_working_offline() {
-  reset
-  serve_bundle || return
-  export VIMIFY_PORTS_URL=http://127.0.0.1:8765/ports.toml
-  select_screen || return
-  # lazygit 0.66 against a port for 5.x.
-  on_screen 'lazygit .*0\.66\.1 .*untested'
-  on_screen 'gitui .*0\.28\.1 .*supported'
-  close
-  exists ~/.cache/vimify/ports.toml
-
-  stop_bundle
-  select_screen || return
-  on_screen 'gitui .*0\.28\.1 .*supported'
-  close
-  export VIMIFY_PORTS_URL=
-}
-
-test_unreachable_bundle_falls_back_to_embedded_ports() {
-  reset
-  export VIMIFY_PORTS_URL=http://127.0.0.1:1/ports.toml
-  select_screen || return
-  on_screen 'lazygit .*supported'
-  on_screen 'gitui .*not supported yet'
-  close
-  export VIMIFY_PORTS_URL=
 }
 
 test_lazysql_config_survives_apply_and_revert() {
