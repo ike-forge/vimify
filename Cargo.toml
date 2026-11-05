@@ -2,6 +2,10 @@
 name = "vimify"
 version = "0.1.0"
 edition = "2024"
+description = "One vim-style keymap and theme for your CLI and TUI tools"
+repository = "https://github.com/ike-forge/vimify"
+homepage = "https://github.com/ike-forge/vimify"
+publish = false
 
 [dependencies]
 anyhow = "1"
@@ -15,3 +19,16 @@ toml = "1.1.8"
 toml_edit = "0.25"
 ureq = { version = "3.5.0", default-features = false, features = ["rustls", "gzip", "platform-verifier"] }
 yaml-edit = "0.3.5"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
+
+[profile.dist]
+inherits = "release"
+
+# `publish = false` makes dist skip the package.
+[package.metadata.dist]
+dist = true
