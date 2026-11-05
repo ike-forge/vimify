@@ -1,5 +1,5 @@
 schema = 1
-version = "0.1.0"
+version = "0.2.0"
 binaries = ["yazi"]
 versions = ">=26.9"
 
@@ -19,6 +19,7 @@ paths = ["$YAZI_CONFIG_HOME/keymap.toml", "$XDG_CONFIG_HOME/yazi/keymap.toml"]
 "mgr.prepend_keymap[run=enter].on" = "right"
 "mgr.prepend_keymap[run=yank].on" = "yank"
 "mgr.prepend_keymap[run=remove].on" = "delete"
+"mgr.prepend_keymap[run=quit].on" = "quit"
 
 [[target]]
 format = "toml"

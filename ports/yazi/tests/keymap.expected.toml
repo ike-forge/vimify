@@ -6,6 +6,7 @@ prepend_keymap = [
 	{ run = "arrow prev", on = "k" },
 	{ run = "enter", on = "l" },
 	{ run = "leave", on = "h" },
+	{ run = "quit", on = "q" },
 	{ run = "remove", on = "d" },
 	{ run = "yank", on = "y" },
 ]

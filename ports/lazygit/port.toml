@@ -1,8 +1,8 @@
 schema = 1
-version = "0.1.0"
+version = "0.2.0"
 binaries = ["lazygit"]
 versions = ">=0.66"
-notes = "yank and delete are not mapped yet."
+notes = "yank covers the file and commit copy keys; delete covers the shared remove key. quit replaces q and ctrl+c: lazygit has one slot for it."
 
 [[target]]
 format = "yaml"
@@ -20,6 +20,10 @@ paths = [
 "keybinding.universal.nextItem-alt" = "down"
 "keybinding.universal.prevBlock-alt" = "left"
 "keybinding.universal.nextBlock-alt" = "right"
+"keybinding.universal.remove" = "delete"
+"keybinding.universal.quit" = "quit"
+"keybinding.files.copyFileInfoToClipboard" = "yank"
+"keybinding.commits.copyCommitAttributeToClipboard" = "yank"
 
 [target.theme]
 "gui.theme.activeBorderColor" = ["{accent}", "bold"]

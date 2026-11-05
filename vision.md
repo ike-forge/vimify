@@ -48,6 +48,7 @@ up = "k"
 right = "l"
 yank = "y"
 delete = "d"
+quit = "q"
 ```
 
 The reference config, and optionally the generated tool configs, are meant to be

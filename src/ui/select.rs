@@ -434,7 +434,7 @@ mod tests {
         assert!(out.contains("c/config.yml"), "{out}");
         assert!(out.contains("Keys       down"), "{out}");
         assert!(
-            out.contains("Not mapped left, up, right, yank, delete"),
+            out.contains("Not mapped left, up, right, yank, delete, quit"),
             "{out}"
         );
         assert!(out.contains("Theme      1 settings"), "{out}");

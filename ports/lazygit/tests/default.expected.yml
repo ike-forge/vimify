@@ -34,3 +34,8 @@ keybinding:
     nextItem-alt: j
     prevBlock-alt: h
     prevItem-alt: k
+    remove: d
+  commits:
+    copyCommitAttributeToClipboard: y
+  files:
+    copyFileInfoToClipboard: y
