@@ -19,6 +19,8 @@ pub fn is_action(name: &str) -> bool {
 pub enum Notation {
     Angle,
     Tcell,
+    /// gitui: the whole value, `Some(( code: Char('h'), modifiers: ""))`.
+    Gitui,
     /// The tool spells keys as the reference does.
     Vim,
 }
@@ -29,6 +31,7 @@ impl Notation {
         match self {
             Notation::Angle => angle(key),
             Notation::Tcell => tcell(key),
+            Notation::Gitui => gitui(key),
             Notation::Vim => Some(key.to_owned()),
         }
     }
@@ -56,6 +59,57 @@ fn angle(key: &str) -> Option<String> {
         _ => return None,
     };
     Some(format!("<{name}>"))
+}
+
+fn gitui(key: &str) -> Option<String> {
+    let (code, modifiers) = if key.chars().count() == 1 {
+        let ch = key.chars().next()?;
+        (
+            char_code(ch),
+            if ch.is_ascii_uppercase() { "SHIFT" } else { "" },
+        )
+    } else {
+        let inner = key.strip_prefix('<')?.strip_suffix('>')?.to_lowercase();
+        if let Some((m @ ("c" | "a"), ch)) = inner.split_once('-')
+            && ch.chars().count() == 1
+        {
+            let modifiers = if m == "c" { "CONTROL" } else { "ALT" };
+            (char_code(ch.chars().next()?), modifiers)
+        } else {
+            let name = match inner.as_str() {
+                "cr" | "enter" | "return" => "Enter",
+                "bs" | "backspace" => "Backspace",
+                "del" | "delete" => "Delete",
+                "pageup" | "pgup" => "PageUp",
+                "pagedown" | "pgdown" | "pgdn" => "PageDown",
+                "space" => return Some(gitui_value(&char_code(' '), "")),
+                "esc" => "Esc",
+                "tab" => "Tab",
+                "up" => "Up",
+                "down" => "Down",
+                "left" => "Left",
+                "right" => "Right",
+                "home" => "Home",
+                "end" => "End",
+                "insert" => "Insert",
+                _ => return None,
+            };
+            (name.to_owned(), "")
+        }
+    };
+    Some(gitui_value(&code, modifiers))
+}
+
+fn char_code(ch: char) -> String {
+    match ch {
+        '\'' => "Char('\\'')".to_owned(),
+        '\\' => "Char('\\\\')".to_owned(),
+        _ => format!("Char('{ch}')"),
+    }
+}
+
+fn gitui_value(code: &str, modifiers: &str) -> String {
+    format!("Some(( code: {code}, modifiers: \"{modifiers}\"))")
 }
 
 /// A name tcell lacks stops lazysql from starting, so this only emits names from
@@ -110,6 +164,32 @@ mod tests {
 
     fn tcell(key: &str) -> Option<String> {
         Notation::Tcell.convert(key)
+    }
+
+    #[test]
+    fn gitui_spells_keys_as_crossterm_events() {
+        let gitui = |k| Notation::Gitui.convert(k);
+        assert_eq!(
+            gitui("h").as_deref(),
+            Some("Some(( code: Char('h'), modifiers: \"\"))")
+        );
+        assert_eq!(
+            gitui("G").as_deref(),
+            Some("Some(( code: Char('G'), modifiers: \"SHIFT\"))")
+        );
+        assert_eq!(
+            gitui("<C-u>").as_deref(),
+            Some("Some(( code: Char('u'), modifiers: \"CONTROL\"))")
+        );
+        assert_eq!(
+            gitui("<PageDown>").as_deref(),
+            Some("Some(( code: PageDown, modifiers: \"\"))")
+        );
+        assert_eq!(
+            gitui("'").as_deref(),
+            Some("Some(( code: Char('\\''), modifiers: \"\"))")
+        );
+        assert_eq!(gitui("<F5>"), None);
     }
 
     #[test]

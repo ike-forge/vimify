@@ -91,6 +91,7 @@ pub enum Format {
     Toml,
     Yaml,
     Json,
+    Ron,
     Lines,
 }
 

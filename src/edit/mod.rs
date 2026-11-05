@@ -1,5 +1,6 @@
 mod block;
 mod lines;
+mod ron;
 mod toml;
 mod yaml;
 
@@ -32,8 +33,10 @@ pub trait Editor {
 pub fn supports(format: Format, strategy: Strategy) -> bool {
     matches!(
         (format, strategy),
-        (Format::Yaml | Format::Toml | Format::Lines, Strategy::Edit)
-            | (Format::Lines, Strategy::Block)
+        (
+            Format::Yaml | Format::Toml | Format::Ron | Format::Lines,
+            Strategy::Edit
+        ) | (Format::Lines, Strategy::Block)
     )
 }
 
@@ -41,6 +44,7 @@ pub fn open(format: Format, strategy: Strategy, text: &str) -> Result<Box<dyn Ed
     match (format, strategy) {
         (Format::Yaml, Strategy::Edit) => Ok(Box::new(yaml::YamlEditor::parse(text)?)),
         (Format::Toml, Strategy::Edit) => Ok(Box::new(toml::TomlEditor::parse(text)?)),
+        (Format::Ron, Strategy::Edit) => Ok(Box::new(ron::RonEditor::parse(text)?)),
         (Format::Lines, Strategy::Edit) => Ok(Box::new(lines::LinesEditor::parse(text))),
         (Format::Lines, Strategy::Block) => Ok(Box::new(block::BlockEditor::parse(text)?)),
         _ => bail!("no editor for {format:?} with {strategy:?}"),

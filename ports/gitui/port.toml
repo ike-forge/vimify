@@ -1,5 +1,44 @@
 schema = 1
 version = "0.1.0"
 binaries = ["gitui"]
+notes = "gitui binds one key per move, so the arrow keys stop moving. up, down, left and right only."
 
-# No [target] yet: key_bindings.ron and theme.ron are RON, which has no editor.
+[[target]]
+format = "ron"
+strategy = "edit"
+key_notation = "gitui"
+paths = [
+  "$XDG_CONFIG_HOME/gitui/key_bindings.ron",
+  "~/Library/Application Support/gitui/key_bindings.ron",
+]
+
+[target.keys]
+move_left = "left"
+move_down = "down"
+move_up = "up"
+move_right = "right"
+
+[[target]]
+format = "ron"
+strategy = "edit"
+paths = [
+  "$XDG_CONFIG_HOME/gitui/theme.ron",
+  "~/Library/Application Support/gitui/theme.ron",
+]
+
+[target.theme]
+selection_bg = 'Some("{selection}")'
+selection_fg = 'Some("{text}")'
+command_fg = 'Some("{text}")'
+cmdbar_bg = 'Some("{surface}")'
+disabled_fg = 'Some("{muted}")'
+diff_line_add = 'Some("{success}")'
+diff_line_delete = 'Some("{error}")'
+diff_file_added = 'Some("{success}")'
+diff_file_removed = 'Some("{error}")'
+diff_file_modified = 'Some("{warning}")'
+diff_file_moved = 'Some("{special}")'
+danger_fg = 'Some("{error}")'
+push_gauge_bg = 'Some("{accent}")'
+push_gauge_fg = 'Some("{base}")'
+branch_fg = 'Some("{accent}")'

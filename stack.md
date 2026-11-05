@@ -18,6 +18,7 @@ not own.
 | YAML               | `yaml-edit` (rowan CST)                            |
 | JSON / JSONC       | `jsonc-parser`, `cst` feature                      |
 | `key = value`      | Own line editor, values verbatim                   |
+| RON                | Own field editor, values verbatim                  |
 | Line-based (`txt`) | Owned block between `# >>> vimify >>>` markers     |
 
 Preferred over all of the above: if the tool supports `include`/`import`/

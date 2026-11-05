@@ -1,0 +1,5 @@
+(
+    selected_tab: Some("Reset"),
+    // keep
+    danger_fg: Some("red"),
+)

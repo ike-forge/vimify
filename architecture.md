@@ -67,7 +67,7 @@ version = "0.1.0"
 binaries = ["lazygit"]
 
 [[target]]
-format = "yaml"            # toml | yaml | json | lines
+format = "yaml"            # toml | yaml | ron | lines
 strategy = "edit"          # edit | block | include
 key_notation = "angle"     # how the tool spells <C-u>
 paths = [                  # first existing wins; first resolvable is created
