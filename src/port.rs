@@ -548,7 +548,7 @@ mod tests {
         .unwrap();
         let (bound, unbound) = port.action_coverage();
         assert_eq!(bound, ["up", "yank"]);
-        assert_eq!(unbound, ["left", "down", "right", "delete"]);
+        assert_eq!(unbound, ["left", "down", "right", "delete", "quit"]);
     }
 
     #[test]

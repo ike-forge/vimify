@@ -8,6 +8,7 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("right", "l"),
     ("yank", "y"),
     ("delete", "d"),
+    ("quit", "q"),
 ];
 
 pub fn is_action(name: &str) -> bool {

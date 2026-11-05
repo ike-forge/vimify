@@ -4,17 +4,17 @@ Updated with every port change. In the app, `i` on a tool shows the same.
 
 ✅ mapped · ⚠️ partly, see limitations · ➖ fixed by the tool, not rebindable · ❌ not mapped
 
-| Tool       | Versions | left | down | up | right | yank | delete | Theme |
-| ---------- | -------- | :--: | :--: | :-: | :---: | :--: | :----: | :---: |
-| bat        | ≥ 0.25   | ❌   | ❌   | ❌ | ❌    | ❌   | ❌     | ⚠️    |
-| btop       | ≥ 1.3    | ➖   | ➖   | ➖ | ➖    | ❌   | ❌     | ✅    |
-| gitui      | —        | ❌   | ❌   | ❌ | ❌    | ❌   | ❌     | ❌    |
-| k9s        | ≥ 0.40   | ❌   | ➖   | ➖ | ❌    | ❌   | ❌     | ✅    |
-| lazydocker | ≥ 0.25   | ❌   | ❌   | ❌ | ❌    | ❌   | ❌     | ✅    |
-| lazygit    | ≥ 0.66   | ✅   | ✅   | ✅ | ✅    | ❌   | ❌     | ✅    |
-| lazysql    | ≥ 0.7    | ❌   | ✅   | ✅ | ❌    | ✅   | ✅     | ✅    |
-| lfk        | ≥ 0.19   | ➖   | ➖   | ➖ | ➖    | ❌   | ❌     | ✅    |
-| yazi       | ≥ 26.9   | ✅   | ✅   | ✅ | ✅    | ✅   | ✅     | ✅    |
+| Tool       | Versions | left | down | up | right | yank | delete | quit | Theme |
+| ---------- | -------- | :--: | :--: | :-: | :---: | :--: | :----: | :--: | :---: |
+| bat        | ≥ 0.25   | ❌   | ❌   | ❌ | ❌    | ❌   | ❌     | ❌   | ⚠️    |
+| btop       | ≥ 1.3    | ➖   | ➖   | ➖ | ➖    | ❌   | ❌     | ➖   | ✅    |
+| gitui      | —        | ❌   | ❌   | ❌ | ❌    | ❌   | ❌     | ❌   | ❌    |
+| k9s        | ≥ 0.40   | ❌   | ➖   | ➖ | ❌    | ❌   | ❌     | ❌   | ✅    |
+| lazydocker | ≥ 0.25   | ❌   | ❌   | ❌ | ❌    | ❌   | ❌     | ➖   | ✅    |
+| lazygit    | ≥ 0.66   | ✅   | ✅   | ✅ | ✅    | ✅   | ✅     | ✅   | ✅    |
+| lazysql    | ≥ 0.7    | ❌   | ✅   | ✅ | ❌    | ✅   | ✅     | ❌   | ✅    |
+| lfk        | ≥ 0.19   | ➖   | ➖   | ➖ | ➖    | ❌   | ❌     | ❌   | ✅    |
+| yazi       | ≥ 26.9   | ✅   | ✅   | ✅ | ✅    | ✅   | ✅     | ✅   | ✅    |
 
 Outside its range a tool still gets the nearest port, shown as `untested` on another
 major version ([architecture.md](architecture.md#sources-and-versioning)).
@@ -30,7 +30,7 @@ major version ([architecture.md](architecture.md#sources-and-versioning)).
 - **k9s**: theme only, through a `vimify` skin. j and k are built in. A skin set per
   cluster or context wins over it.
 - **lazydocker**: theme only; it has no configurable keybindings.
-- **lazygit**: yank and delete not mapped yet.
+- **lazygit**: quit takes the one slot lazygit has, so ctrl+c stops quitting. Yank covers the file and commit copy keys only.
 - **lazysql**: left and right not mapped: H and L switch panes, h and l move between
   cells.
 - **lfk**: theme only; navigation is fixed, and resource deletion stays on D.
