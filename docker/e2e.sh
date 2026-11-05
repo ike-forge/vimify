@@ -147,6 +147,12 @@ keybinding:
     nextBlock-alt: l
     prevBlock-alt: h
     prevItem-alt: k
+    quit: q
+    remove: d
+  commits:
+    copyCommitAttributeToClipboard: y
+  files:
+    copyFileInfoToClipboard: y
 git:
   autoFetch: false # corporate proxy"
   is_original "$CFG.bak"
@@ -316,26 +322,12 @@ test_lazygit_honours_what_vimify_wrote() {
   press j "$start"
 }
 
-# gitui has no working port: it sits right after the eight supported tools.
-test_unsupported_tools_are_greyed_out_and_cannot_be_applied() {
-  reset
-  tmux -u new-session -d -s app -x 150 -y 40 'vimify 2>&1; echo EXIT=$?; sleep 60'
-  wait_for 'apply to all' || return
-  on_screen 'gitui .*not supported yet'
-  # Cursor on an unsupported tool, then try to tick it.
-  tmux -u send-keys -t app j j j j j j j j j j Space Enter
-  wait_for ' confirm' || return
-  off_screen 'gitui'
-  on_screen 'create .*lazygit'
-  close
-}
-
 test_info_modal_shows_what_a_port_covers() {
   reset
   tmux -u new-session -d -s app -x 150 -y 40 'vimify 2>&1; echo EXIT=$?; sleep 60'
   wait_for 'apply to all' || return
-  # The tools sort as bat, btop, k9s, lazydocker.
-  tmux -u send-keys -t app j j j j j i
+  # The tools sort as bat, btop, gitui, k9s, lazydocker.
+  tmux -u send-keys -t app j j j j j j i
   wait_for 'any key closes' || return
   on_screen 'Keys *none'
   on_screen 'Theme *4 settings'
@@ -356,7 +348,7 @@ test_versions_are_detected_and_shown() {
   on_screen 'lazygit .*0\.66\.1 .*supported'
   on_screen 'lazysql .*0\.7\.0 .*supported'
   on_screen 'btop .*1\.3\.2 .*supported'
-  on_screen 'gitui .*0\.28\.1 .*not supported yet'
+  on_screen 'gitui .*0\.28\.1 .*supported'
   close
 }
 
