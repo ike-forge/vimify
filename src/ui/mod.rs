@@ -3,7 +3,7 @@ mod scan;
 mod select;
 
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use ratatui::DefaultTerminal;
@@ -23,6 +23,9 @@ pub struct Outcome {
     /// The port each detected tool resolved to.
     pub ports: Vec<Port>,
 }
+
+/// A scan that finishes within this window never shows its progress screen.
+const SCAN_SCREEN_DELAY: Duration = Duration::from_millis(400);
 
 enum Screen {
     Scan(ScanScreen),
@@ -62,6 +65,7 @@ fn event_loop(
 ) -> Result<Option<Outcome>> {
     let mut screen = Screen::Scan(ScanScreen::new(dirs.len()));
     let rx = crate::scan::spawn(dirs, ports.clone());
+    let started = Instant::now();
     loop {
         if let Screen::Scan(scan) = &mut screen {
             while let Ok(ev) = rx.try_recv() {
@@ -73,7 +77,11 @@ fn event_loop(
             }
         }
         terminal.draw(|f| match &screen {
-            Screen::Scan(s) => s.render(f),
+            Screen::Scan(s) => {
+                if started.elapsed() >= SCAN_SCREEN_DELAY {
+                    s.render(f);
+                }
+            }
             Screen::Select(s) => s.render(f),
             Screen::Confirm(_, c) => c.render(f),
         })?;

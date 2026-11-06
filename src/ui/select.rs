@@ -136,10 +136,10 @@ impl SelectScreen {
     }
 
     pub fn render(&self, frame: &mut Frame) {
-        let [title, list, footer] = Layout::vertical([
+        let [title, hints, list] = Layout::vertical([
+            Constraint::Length(1),
             Constraint::Length(2),
             Constraint::Fill(1),
-            Constraint::Length(1),
         ])
         .margin(1)
         .areas(frame.area());
@@ -194,14 +194,40 @@ impl SelectScreen {
             list,
             &mut state,
         );
-        frame.render_widget(
-            Line::from("j/k move  space toggle  i info  enter confirm  q quit").dim(),
-            footer,
-        );
+        frame.render_widget(Line::from(palette()), hints);
         if let Some(tool) = self.info.and_then(|i| self.tools.get(i)) {
-            render_info(frame, tool);
+            let row_width = self
+                .tools
+                .iter()
+                .map(|t| paths::display(&t.detection.path).chars().count())
+                .max()
+                .unwrap_or(0)
+                + width
+                + 2 * 3
+                + 9
+                + 9
+                + 2;
+            let anchor = Rect {
+                x: list.x + row_width as u16 + 2,
+                y: list.y + index as u16,
+                ..list
+            };
+            render_info(frame, tool, anchor);
         }
     }
+}
+
+fn palette() -> Vec<Span<'static>> {
+    let keys = [
+        ("j/k", "move"),
+        ("space", "toggle"),
+        ("i", "details"),
+        ("enter", "review changes"),
+        ("q", "quit"),
+    ];
+    keys.into_iter()
+        .flat_map(|(key, label)| [key.bold(), format!(" {label}   ").dim()])
+        .collect()
 }
 
 fn version_text(tool: &Tool) -> String {
@@ -211,9 +237,18 @@ fn version_text(tool: &Tool) -> String {
     }
 }
 
-fn render_info(frame: &mut Frame, tool: &Tool) {
+/// Placed beside the selected row at `anchor`; centered when it does not fit.
+fn render_info(frame: &mut Frame, tool: &Tool, anchor: Rect) {
     let lines = info(tool);
-    let area = centered(frame.area(), 76, lines.len() as u16 + 4);
+    let screen = frame.area();
+    let (width, height) = (60, lines.len() as u16 + 4);
+    let fits = anchor.x + width <= screen.right();
+    let area = if fits {
+        let y = anchor.y.min(screen.bottom().saturating_sub(height));
+        Rect::new(anchor.x, y, width, height.min(screen.height))
+    } else {
+        centered(screen, 76, height)
+    };
     frame.render_widget(Clear, area);
     let block = Block::bordered()
         .title(format!(" {} ", tool.detection.port))
