@@ -36,7 +36,7 @@ include line.
 Prompt crates (dialoguer, inquire) would cover a progress bar and a
 multi-select, but the tool list needs:
 
-- `apply to all` / `apply to none` rows that drive the other rows.
+- `select all` / `select none` rows that drive the other rows.
 - Per-tool status (applied, not applied, modified since apply).
 - hjkl navigation. A tool named vimify cannot ship without it.
 
@@ -72,11 +72,12 @@ $ vimify
  Scanning  ███████████░░░░░░░  6/11  ~/.cargo/bin
 
  Config                 Applications
-
- theme   catppuccin-frappe   [x] apply to all
- left    h                   [ ] apply to none
- down    n *                 ─────────────────
- up      k                   [x] lazygit
+                             i details
+ theme   catppuccin-frappe    Apply changes
+ left    h                   [x] select all
+ down    n *                 [ ] select none
+ up      k                   ─────────────────
+                             [x] lazygit
                              [ ] lazysql      (excluded)
                              [x] yazi
 ```
