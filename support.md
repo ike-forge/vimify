@@ -11,6 +11,7 @@ blank: the tool has no such action
 | ---------- | -------- | :--: | :--: | :--: | :---: | :--: | :----: | :--: | :---: |
 | lazygit    | ≥ 0.66   |  ✅  |  ✅  |  ✅  |  ✅   |  ✅  |   ✅   |  ✅  |  ✅   |
 | yazi       | ≥ 26.9   |  ✅  |  ✅  |  ✅  |  ✅   |  ✅  |   ✅   |  ✅  |  ✅   |
+| gitui      | ≥ 0.28   |  ✅  |  ✅  |  ✅  |  ✅   |  ✅  |   ❌   |  ✅  |  ✅   |
 | lazysql    | ≥ 0.7    |  ❌  |  ✅  |  ✅  |  ❌   |  ✅  |   ✅   |  ❌  |  ✅   |
 | less       | ≥ 582    |  ✅  |  ✅  |  ✅  |  ✅   |      |        |  ✅  |  ❌   |
 | stu        | ≥ 0.7    |  🟡  |  ✅  |  ✅  |  🟡   |  ✅  |        |  ❌  |  ➖   |
@@ -19,7 +20,6 @@ blank: the tool has no such action
 | bat        | ≥ 0.25   |  ➖  |  ➖  |  ➖  |  ➖   |      |        |  ➖  |  🟡   |
 | lfk        | ≥ 0.19   |  ➖  |  ➖  |  ➖  |  ➖   |  ❌  |   ❌   |  ❌  |  ✅   |
 | k9s        | ≥ 0.40   |  ❌  |  ➖  |  ➖  |  ❌   |  ❌  |   ❌   |  ❌  |  ✅   |
-| gitui      | —        |  ❌  |  ❌  |  ❌  |  ❌   |  ❌  |   ❌   |  ❌  |  ❌   |
 
 Outside its range a tool still gets the nearest port, shown as `untested` on another
 major version ([architecture.md](architecture.md#sources-and-versioning)).
@@ -30,6 +30,8 @@ major version ([architecture.md](architecture.md#sources-and-versioning)).
 - **yazi**: keys cover the file list only; the task, preview and input layers keep
   their own. A keymap written as `[[mgr.prepend_keymap]]` tables is refused: use the
   inline array.
+- **gitui**: one key per move, so the arrow keys stop moving. Help moves from h to ?.
+  delete is not mapped: gitui spreads discarding and deleting over several keys.
 - **lazysql**: left and right not mapped: H and L switch panes, h and l move between
   cells.
 - **stu**: left and right scroll and switch tabs in the detail, preview and dialog
@@ -50,7 +52,6 @@ major version ([architecture.md](architecture.md#sources-and-versioning)).
 - **less**: keys only, and for every program paging through less: bat, man, git.
   left and right scroll sideways; h no longer opens help, H still does. BusyBox
   less reads no lesskey file.
-- **gitui**: not supported. Its config is RON, which has no format-preserving editor.
 
 ## Files written
 
@@ -58,6 +59,7 @@ major version ([architecture.md](architecture.md#sources-and-versioning)).
 | ---------- | ------------------------------------------------------------- |
 | lazygit    | `lazygit/config.yml`                                          |
 | yazi       | `yazi/keymap.toml`, `yazi/theme.toml`                         |
+| gitui      | `gitui/key_bindings.ron`, `gitui/theme.ron`                   |
 | lazysql    | `lazysql/config.toml`                                         |
 | stu        | `~/.stu/keybindings.toml`                                     |
 | btop       | `btop/btop.conf`, `btop/themes/vimify.theme`                  |

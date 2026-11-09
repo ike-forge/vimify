@@ -1,7 +1,8 @@
 schema = 1
 version = "0.1.0"
 binaries = ["gitui"]
-notes = "gitui binds one key per move, so the arrow keys stop moving. up, down, left and right only."
+versions = ">=0.28"
+notes = "gitui binds one key per move, so the arrow keys stop moving. Help moves from h to ?, since h is left. delete is not mapped: gitui spreads discarding and deleting over several keys."
 
 [[target]]
 format = "ron"
@@ -17,6 +18,12 @@ move_left = "left"
 move_down = "down"
 move_up = "up"
 move_right = "right"
+copy = "yank"
+quit = "quit"
+
+# gitui's help is on h, which left takes.
+[target.theme]
+open_help = "Some(( code: Char('?'), modifiers: \"\"))"
 
 [[target]]
 format = "ron"
