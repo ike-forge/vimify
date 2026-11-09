@@ -59,9 +59,9 @@ mise run e2e     # real vimify and tools in that container, through tmux
 
 The sandbox installs release binaries pinned by sha256 in `docker/tools.lock`
 (apt for distro-packaged tools). Add a tool there when adding its port. The host
-Docker socket is mounted when present, for lazydocker. `mise run
-sandbox:cluster` starts a kind cluster for k9s; the sandbox joins it when it
-exists. Demo data comes from `docker/seed.sh`; `~` is itself a git repo, so
+Docker socket is mounted when present, for lazydocker. `mise run sandbox` also
+starts a kind cluster for k9s and a seeded RustFS S3 server for stu, and leaves
+both running; `sandbox:cluster:delete` and `sandbox:s3:delete` remove them. Demo data comes from `docker/seed.sh`; `~` is itself a git repo, so
 `lazygit` in `~` shows what vimify changed.
 
 ## Interface

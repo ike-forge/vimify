@@ -35,24 +35,24 @@ docker build "$@" -f docker/Dockerfile -t vimify-sandbox .
 
 # Fresh container each run: no state carries over. The host Docker socket is
 # mounted for lazydocker, which gives the container control of host Docker.
-# If the kind cluster exists, the container joins its network for k9s.
 [tasks.sandbox]
-depends = ["sandbox:build"]
+depends = ["sandbox:build", "sandbox:cluster", "sandbox:s3"]
 run = """
 set --
 sock=/var/run/docker.sock
 [ -S "$sock" ] && set -- -v "$sock:$sock" --group-add "$(stat -c %g "$sock" 2>/dev/null || stat -f %g "$sock")"
-if kind get clusters 2>/dev/null | grep -qx vimify; then
-  set -- "$@" --network kind -e SANDBOX_KUBECONFIG="$(kind get kubeconfig --internal --name vimify)"
-fi
-docker run --rm -it "$@" vimify-sandbox
+# Repeated --network needs Docker 25+.
+docker run --rm -it "$@" \
+  --network kind -e SANDBOX_KUBECONFIG="$(kind get kubeconfig --internal --name vimify)" \
+  --network vimify-s3 -e SANDBOX_S3=http://vimify-s3:9000 \
+  vimify-sandbox
 """
 
 [tasks.e2e]
 depends = ["sandbox:build"]
 run = "docker run --rm vimify-sandbox sandbox-e2e"
 
-# Opt-in: pulls a ~1GB node image and keeps a cluster running on host Docker.
+# Pulls a ~1GB node image once and keeps a cluster running on host Docker.
 [tasks."sandbox:cluster"]
 run = """
 if ! kind get clusters 2>/dev/null | grep -qx vimify; then
@@ -61,6 +61,8 @@ if ! kind get clusters 2>/dev/null | grep -qx vimify; then
   kind create cluster --name vimify --kubeconfig "$cfg"
   rm -f "$cfg"
 fi
+# Stopped after a host or Docker restart.
+docker start vimify-control-plane >/dev/null
 # Pulled by host Docker: the node's containerd lacks the proxy CAs. Not `kind
 # load`: it imports all platforms, but the containerd image store holds only one.
 for img in $(sed -n 's/^ *image: *//p' docker/cluster.yaml | sort -u); do
@@ -68,8 +70,34 @@ for img in $(sed -n 's/^ *image: *//p' docker/cluster.yaml | sort -u); do
   docker save "$img" | docker exec -i vimify-control-plane ctr -n k8s.io images import - >/dev/null
 done
 # The node's own kubectl, so the host needs none.
-docker exec -i vimify-control-plane kubectl --kubeconfig /etc/kubernetes/admin.conf apply -f - < docker/cluster.yaml
+k() { docker exec -i vimify-control-plane kubectl --kubeconfig /etc/kubernetes/admin.conf "$@"; }
+i=0
+until k get --raw /readyz >/dev/null 2>&1; do
+  i=$((i + 1)); [ "$i" -lt 60 ] || { echo "kind API not ready" >&2; exit 1; }; sleep 1
+done
+k apply -f - < docker/cluster.yaml
 """
 
 [tasks."sandbox:cluster:delete"]
 run = "kind delete cluster --name vimify"
+
+# S3 server for stu. RustFS, not MinIO: MinIO no longer publishes images.
+# Credentials are repeated in docker/entrypoint.sh.
+[tasks."sandbox:s3"]
+run = """
+docker network inspect vimify-s3 >/dev/null 2>&1 || docker network create vimify-s3 >/dev/null
+if ! docker container inspect vimify-s3 >/dev/null 2>&1; then
+  docker run -d --name vimify-s3 --network vimify-s3 -p 127.0.0.1:9001:9001 \
+    -e RUSTFS_ACCESS_KEY=sandbox -e RUSTFS_SECRET_KEY=sandbox-secret \
+    -e RUSTFS_CONSOLE_ENABLE=true rustfs/rustfs:1.0.4 >/dev/null
+fi
+docker start vimify-s3 >/dev/null
+docker run --rm -i --network vimify-s3 \
+  -e AWS_ACCESS_KEY_ID=sandbox -e AWS_SECRET_ACCESS_KEY=sandbox-secret \
+  -e AWS_REGION=us-east-1 -e S3_ENDPOINT=http://vimify-s3:9000 \
+  --entrypoint sh amazon/aws-cli:2.39.6 -s < docker/s3-seed.sh
+echo "console: http://127.0.0.1:9001 (sandbox / sandbox-secret)"
+"""
+
+[tasks."sandbox:s3:delete"]
+run = "docker rm -f vimify-s3 >/dev/null 2>&1; docker network rm vimify-s3 >/dev/null 2>&1; true"
