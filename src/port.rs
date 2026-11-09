@@ -256,6 +256,10 @@ const FORBIDDEN_VARS: &[&str] = &[
     "XDG_STATE_HOME",
 ];
 
+/// Named one by one: a wildcard over `~/.*` would reach `~/.ssh` and `~/.aws`.
+/// `.stu` is stu's only config location.
+const HOME_CONFIG_DIRS: &[&str] = &[".config/", "Library/Application Support/", ".stu/"];
+
 /// A port must not reach arbitrary files. This bounds the damage; it does not replace
 /// reviewing what a port writes.
 fn validate_path(path: &str) -> Result<()> {
@@ -263,7 +267,7 @@ fn validate_path(path: &str) -> Result<()> {
         bail!("path {path} leaves its directory");
     }
     if let Some(rest) = path.strip_prefix("~/") {
-        if rest.starts_with(".config/") || rest.starts_with("Library/Application Support/") {
+        if HOME_CONFIG_DIRS.iter().any(|dir| rest.starts_with(dir)) {
             return Ok(());
         }
         bail!("path {path} is outside the config directories");
@@ -446,6 +450,7 @@ mod tests {
             "$XDG_CONFIG_HOME/a/config.yml",
             "~/.config/a/config.yml",
             "~/Library/Application Support/a/config.yml",
+            "~/.stu/keybindings.toml",
             "$LG_CONFIG_FILE",
             "$CONFIG_DIR/config.yml",
         ] {
@@ -453,6 +458,8 @@ mod tests {
         }
         for path in [
             "~/.ssh/config",
+            "~/.aws/credentials",
+            "~/.stuff/config",
             "~/.bashrc",
             "/etc/passwd",
             "$HOME/.ssh/config",

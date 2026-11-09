@@ -22,6 +22,8 @@ pub enum Notation {
     Tcell,
     /// gitui: the whole value, `Some(( code: Char('h'), modifiers: ""))`.
     Gitui,
+    /// stu: `ctrl-u`, `shift-g`, inside a list.
+    Stu,
     /// The tool spells keys as the reference does.
     Vim,
 }
@@ -33,8 +35,14 @@ impl Notation {
             Notation::Angle => angle(key),
             Notation::Tcell => tcell(key),
             Notation::Gitui => gitui(key),
+            Notation::Stu => stu(key),
             Notation::Vim => Some(key.to_owned()),
         }
+    }
+
+    /// The tool takes a list of keys per binding, so the key is written as one.
+    pub fn is_list(self) -> bool {
+        self == Notation::Stu
     }
 }
 
@@ -155,9 +163,69 @@ fn tcell(key: &str) -> Option<String> {
     Some(name.to_owned())
 }
 
+/// stu lowercases what it reads, so `G` must be `shift-g`, and it reads one byte as a
+/// char, so non-ASCII keys cannot be bound.
+fn stu(key: &str) -> Option<String> {
+    if key.chars().count() == 1 {
+        return match key.chars().next()? {
+            ' ' => Some("space".to_owned()),
+            ch if ch.is_ascii_uppercase() => Some(format!("shift-{}", ch.to_ascii_lowercase())),
+            ch if ch.is_ascii_graphic() => Some(key.to_owned()),
+            _ => None,
+        };
+    }
+    let inner = key.strip_prefix('<')?.strip_suffix('>')?.to_lowercase();
+    if let Some((m @ ("c" | "a"), ch)) = inner.split_once('-')
+        && ch.chars().count() == 1
+        && ch.chars().all(|c| c.is_ascii_graphic())
+    {
+        let modifier = if m == "c" { "ctrl" } else { "alt" };
+        return Some(format!("{modifier}-{ch}"));
+    }
+    let name = match inner.as_str() {
+        "cr" | "enter" | "return" => "enter",
+        "bs" | "backspace" => "backspace",
+        "del" | "delete" => "delete",
+        "pageup" | "pgup" => "pageup",
+        "pagedown" | "pgdown" | "pgdn" => "pagedown",
+        "esc" | "tab" | "space" | "up" | "down" | "left" | "right" | "home" | "end" | "insert" => {
+            &inner
+        }
+        _ => return None,
+    };
+    Some(name.to_owned())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn stu(key: &str) -> Option<String> {
+        Notation::Stu.convert(key)
+    }
+
+    #[test]
+    fn stu_spells_uppercase_with_shift() {
+        assert_eq!(stu("j").as_deref(), Some("j"));
+        assert_eq!(stu("G").as_deref(), Some("shift-g"));
+        assert_eq!(stu("?").as_deref(), Some("?"));
+        assert_eq!(stu(" ").as_deref(), Some("space"));
+    }
+
+    #[test]
+    fn stu_spells_modifiers_and_names() {
+        assert_eq!(stu("<C-u>").as_deref(), Some("ctrl-u"));
+        assert_eq!(stu("<A-x>").as_deref(), Some("alt-x"));
+        assert_eq!(stu("<CR>").as_deref(), Some("enter"));
+        assert_eq!(stu("<PageDown>").as_deref(), Some("pagedown"));
+    }
+
+    #[test]
+    fn stu_refuses_what_it_cannot_parse() {
+        assert_eq!(stu("ä"), None);
+        assert_eq!(stu("gg"), None);
+        assert_eq!(stu("<F5>"), None);
+    }
 
     fn angle(key: &str) -> Option<String> {
         Notation::Angle.convert(key)

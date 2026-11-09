@@ -48,6 +48,7 @@ COPY --from=build /vimify /usr/local/bin/vimify
 
 COPY docker/entrypoint.sh /usr/local/bin/sandbox-entrypoint
 COPY docker/e2e.sh /usr/local/bin/sandbox-e2e
+COPY docker/fake-s3.py /usr/local/bin/sandbox-fake-s3
 RUN useradd -m -s /bin/bash dev
 USER dev
 WORKDIR /home/dev

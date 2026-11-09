@@ -14,6 +14,7 @@ Updated with every port change. In the app, `i` on a tool shows the same.
 | lazygit    | ≥ 0.66   | ✅   | ✅   | ✅ | ✅    | ✅   | ✅     | ✅   | ✅    |
 | lazysql    | ≥ 0.7    | ❌   | ✅   | ✅ | ❌    | ✅   | ✅     | ❌   | ✅    |
 | lfk        | ≥ 0.19   | ➖   | ➖   | ➖ | ➖    | ❌   | ❌     | ❌   | ✅    |
+| stu        | ≥ 0.7    | ⚠️   | ✅   | ✅ | ⚠️    | ✅   | ➖     | ❌   | ➖    |
 | yazi       | ≥ 26.9   | ✅   | ✅   | ✅ | ✅    | ✅   | ✅     | ✅   | ✅    |
 
 Outside its range a tool still gets the nearest port, shown as `untested` on another
@@ -34,6 +35,10 @@ major version ([architecture.md](architecture.md#sources-and-versioning)).
 - **lazysql**: left and right not mapped: H and L switch panes, h and l move between
   cells.
 - **lfk**: theme only; navigation is fixed, and resource deletion stays on D.
+- **stu**: left and right scroll and switch tabs in the detail, preview and dialog
+  views; the bucket and object lists keep enter and backspace. A binding replaces
+  stu's key, so copy details moves off r. stu cannot delete. quit is not mapped:
+  stu quits on that key even while typing a filter. Colours are built in.
 - **yazi**: keys cover the file list only; the task, preview and input layers keep
   their own. A keymap written as `[[mgr.prepend_keymap]]` tables is refused: use the
   inline array.
@@ -49,7 +54,9 @@ major version ([architecture.md](architecture.md#sources-and-versioning)).
 | lazygit    | `lazygit/config.yml`                                          |
 | lazysql    | `lazysql/config.toml`                                         |
 | lfk        | `lfk/config.yaml`                                             |
+| stu        | `~/.stu/keybindings.toml`                                     |
 | yazi       | `yazi/keymap.toml`, `yazi/theme.toml`                         |
 
-Paths are relative to `$XDG_CONFIG_HOME`, or a tool's own variable when set
-(`$LG_CONFIG_FILE`, `$K9S_CONFIG_DIR`, `$LFK_CONFIG_DIR`, `$YAZI_CONFIG_HOME`, ...).
+Paths are relative to `$XDG_CONFIG_HOME` unless they start with `~`, or a tool's own
+variable when set (`$LG_CONFIG_FILE`, `$K9S_CONFIG_DIR`, `$LFK_CONFIG_DIR`,
+`$STU_ROOT_DIR`, `$YAZI_CONFIG_HOME`, ...).

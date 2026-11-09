@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 
+use crate::actions::Notation;
 use crate::edit::{self, Value};
 use crate::palette::{self, Palette};
 use crate::port::{Target, ThemeValue};
@@ -24,7 +25,11 @@ pub fn render(
             .keys
             .get(action)
             .with_context(|| format!("no key for action {action}"))?;
-        match target.key_notation.and_then(|n| n.convert(key)) {
+        let notation = target.key_notation;
+        match notation.and_then(|n| n.convert(key)) {
+            Some(converted) if notation.is_some_and(Notation::is_list) => {
+                values.push((setting.clone(), Value::List(vec![converted])));
+            }
             Some(converted) => values.push((setting.clone(), Value::Str(converted))),
             None => warnings.push(format!("{tool} cannot express key {key}")),
         }
@@ -80,6 +85,21 @@ mod tests {
         let out = render_port(&text, &reference);
 
         assert_eq!(out.values, [("a.b".into(), Value::Str("<c-n>".into()))]);
+    }
+
+    #[test]
+    fn a_list_notation_writes_the_key_as_a_list() {
+        let mut reference = Reference::default();
+        reference.keys.insert("down".into(), "G".into());
+        let text =
+            format!("{TARGET}[target.keys]\n\"a.b\" = \"down\"\n").replace("\"angle\"", "\"stu\"");
+
+        let out = render_port(&text, &reference);
+
+        assert_eq!(
+            out.values,
+            [("a.b".into(), Value::List(vec!["shift-g".into()]))]
+        );
     }
 
     #[test]

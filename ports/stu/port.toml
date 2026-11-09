@@ -1,0 +1,35 @@
+schema = 1
+version = "0.1.0"
+binaries = ["stu"]
+versions = ">=0.7"
+
+notes = "Keys only: stu's colours are built in. A binding replaces stu's key, so copy details moves off r. delete is not mapped: stu cannot delete. quit is not mapped: stu quits on its quit key even while typing a filter, so q would quit mid-word."
+
+# The only location stu reads, besides $STU_ROOT_DIR. Each value replaces stu's own list.
+[[target]]
+format = "toml"
+strategy = "edit"
+key_notation = "stu"
+paths = ["$STU_ROOT_DIR/keybindings.toml", "~/.stu/keybindings.toml"]
+
+[target.keys]
+"bucket_list.down" = "down"
+"bucket_list.up" = "up"
+"bucket_list.copy_details" = "yank"
+"object_list.down" = "down"
+"object_list.up" = "up"
+"object_list.copy_details" = "yank"
+"object_detail.down" = "down"
+"object_detail.up" = "up"
+"object_detail.left" = "left"
+"object_detail.right" = "right"
+"object_detail.copy_details" = "yank"
+"object_preview.down" = "down"
+"object_preview.up" = "up"
+"object_preview.left" = "left"
+"object_preview.right" = "right"
+"object_preview.copy" = "yank"
+"select_dialog.down" = "down"
+"select_dialog.up" = "up"
+"select_dialog.left" = "left"
+"select_dialog.right" = "right"

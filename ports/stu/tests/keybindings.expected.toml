@@ -1,0 +1,35 @@
+# My stu keys
+[common]
+help = ["?", "f1"] # mine
+
+[object_list]
+back = ["backspace", "h"]
+select = ["enter", "l"]
+copy_details = ["y"]
+down = ["j"]
+up = ["k"]
+
+[bucket_list]
+copy_details = ["y"]
+down = ["j"]
+up = ["k"]
+
+[object_detail]
+copy_details = ["y"]
+down = ["j"]
+left = ["h"]
+right = ["l"]
+up = ["k"]
+
+[object_preview]
+copy = ["y"]
+down = ["j"]
+left = ["h"]
+right = ["l"]
+up = ["k"]
+
+[select_dialog]
+down = ["j"]
+left = ["h"]
+right = ["l"]
+up = ["k"]

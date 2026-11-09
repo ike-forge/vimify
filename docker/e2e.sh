@@ -59,7 +59,7 @@ close() { tmux -u kill-server 2>/dev/null; }
 reset() {
   close
   rm -rf ~/.config/lazygit ~/.config/lazydocker ~/.config/lfk ~/.config/lazysql \
-    ~/.config/bat ~/.config/btop ~/.config/k9s ~/.config/yazi \
+    ~/.config/bat ~/.config/btop ~/.config/k9s ~/.config/yazi ~/.stu \
     ~/.config/vimify ~/.local/state/vimify ~/.cache/vimify
   mkdir -p ~/.config/lazysql
   cp /tmp/lazysql.seed "$LAZYSQL"
@@ -349,6 +349,7 @@ test_versions_are_detected_and_shown() {
   on_screen 'lazysql .*0\.7\.0 .*supported'
   on_screen 'btop .*1\.3\.2 .*supported'
   on_screen 'gitui .*0\.28\.1 .*supported'
+  on_screen 'stu .*0\.7\.6 .*supported'
   close
 }
 
@@ -511,6 +512,34 @@ test_bat_uses_the_terminal_palette() {
   esac
   revert
   is_original ~/.config/bat/config
+}
+
+# stu refuses to start on a key it cannot parse, and its help lists every binding.
+test_stu_honours_what_vimify_wrote() {
+  reset
+  mkdir -p ~/.config/vimify
+  printf '[keys]\ndown = "<C-n>"\n' >"$REFERENCE"
+  apply
+  in_file ~/.stu/keybindings.toml 'down = \["ctrl-n"\]'
+  close
+  python3 /usr/local/bin/sandbox-fake-s3 9555 &
+  local s3=$!
+  tmux -u new-session -d -s app -x 150 -y 40 \
+    'stu --endpoint-url http://127.0.0.1:9555 --path-style always --no-sign-request; sleep 60'
+  wait_for '1 / 2' || { kill "$s3"; return; }
+  tmux -u send-keys -t app C-n
+  wait_for '2 / 2'
+  tmux -u send-keys -t app y
+  wait_for 's3://beta/'
+  tmux -u send-keys -t app Escape
+  # stu's own help key survives.
+  tmux -u send-keys -t app '?'
+  wait_for 'Ctrl-n>: Select next item'
+  on_screen '<y>: Open copy dialog'
+  close
+  kill "$s3"
+  revert
+  absent ~/.stu/keybindings.toml
 }
 
 test_k9s_loads_the_skin() {

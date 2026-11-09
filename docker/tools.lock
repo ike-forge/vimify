@@ -14,3 +14,5 @@ amd64 c3752ad51a5a4015a113819c4eeb6e55a4d0e4b8e652494797532f6fc8161dd7 https://g
 arm64 3ee05c82e5f9198928a4e86133608ba6a2c10a2244d6a7789e820f78319d640c https://github.com/derailed/k9s/releases/download/v0.51.0/k9s_Linux_arm64.tar.gz k9s
 amd64 4d8849e3fd59d10b2f6c8022a3ade8c7e082bf2a2bcd01a7ff0d4ae645b8a89f https://github.com/janosmiko/lfk/releases/download/v0.19.4/lfk_0.19.4_linux_amd64.tar.gz lfk
 arm64 b1a1a010991f22c1e425aa1d7ee531ac3645499dddba5e44e39c809c5a8f323f https://github.com/janosmiko/lfk/releases/download/v0.19.4/lfk_0.19.4_linux_arm64.tar.gz lfk
+amd64 78aa850772f068b44eefa91732e345b30bcd17476ac23cb808f6b285a8162126 https://github.com/lusingander/stu/releases/download/v0.7.6/stu-0.7.6-x86_64-unknown-linux-gnu.tar.gz stu
+arm64 d2bd884ede4ad05483847719daa4343de792f242c711df9ac8e35112caae1965 https://github.com/lusingander/stu/releases/download/v0.7.6/stu-0.7.6-aarch64-unknown-linux-gnu.tar.gz stu
