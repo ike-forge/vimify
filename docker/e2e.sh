@@ -76,9 +76,10 @@ seed() {
 confirm() {
   close
   tmux -u new-session -d -s app -x 150 -y 40 'vimify 2>&1; echo EXIT=$?; sleep 60'
-  wait_for 'apply to all' || return 1
+  wait_for 'select all' || return 1
   [ "$#" = 0 ] || tmux -u send-keys -t app "$@"
-  tmux -u send-keys -t app Enter
+  # Enter only confirms on the `Apply changes` row, the top one.
+  tmux -u send-keys -t app g Enter
   wait_for ' confirm'
 }
 
@@ -91,7 +92,7 @@ accept() {
 close_after_read() { OUTPUT=$(screen); close; }
 
 apply() { confirm && accept; }
-revert() { confirm j Space && accept; }
+revert() { confirm j j Space && accept; }
 
 on_screen() { screen | grep -q -- "$1" || fail "screen lacks '$1'"; }
 off_screen() { ! screen | grep -q -- "$1" || fail "screen shows '$1'"; }
@@ -207,7 +208,7 @@ test_unusable_config_fails_without_touching_it() {
 test_revert_of_an_untouched_file_is_byte_identical() {
   seed
   apply
-  confirm j Space
+  confirm j j Space
   on_screen 'revert .*lazygit'
   off_screen 'updated manually'
   accept
@@ -225,7 +226,7 @@ test_unrelated_edits_are_not_manual_and_survive_revert() {
   confirm
   on_screen 'current .*lazygit'
   off_screen 'by hand'
-  confirm j Space
+  confirm j j Space
   off_screen 'updated manually'
   accept
   is_text "${ORIGINAL/autoFetch: false # corporate proxy/autoFetch: true # by hand}os: {editPreset: nvim} # by hand"
@@ -256,7 +257,7 @@ test_manual_key_edit_warns_on_revert() {
   apply
   sed -i 's/prevItem-alt: k/prevItem-alt: i/' "$CFG"
   sed -i 's/autoFetch: false # corporate proxy/autoFetch: true # by hand/' "$CFG"
-  confirm j Space
+  confirm j j Space
   on_screen 'changed by hand'
   on_screen 'updated manually, force revert'
   accept
@@ -325,9 +326,9 @@ test_lazygit_honours_what_vimify_wrote() {
 test_info_modal_shows_what_a_port_covers() {
   reset
   tmux -u new-session -d -s app -x 150 -y 40 'vimify 2>&1; echo EXIT=$?; sleep 60'
-  wait_for 'apply to all' || return
+  wait_for 'select all' || return
   # The tools sort as bat, btop, gitui, k9s, lazydocker.
-  tmux -u send-keys -t app j j j j j j i
+  tmux -u send-keys -t app j j j j j j j i
   wait_for 'any key closes' || return
   on_screen 'Keys *none'
   on_screen 'Theme *4 settings'
@@ -336,7 +337,7 @@ test_info_modal_shows_what_a_port_covers() {
   tmux -u send-keys -t app q
   sleep 0.5
   off_screen 'any key closes'
-  on_screen 'apply to all'
+  on_screen 'select all'
   off_screen 'EXIT='
   close
 }
@@ -344,7 +345,7 @@ test_info_modal_shows_what_a_port_covers() {
 test_versions_are_detected_and_shown() {
   reset
   tmux -u new-session -d -s app -x 150 -y 40 'vimify 2>&1; sleep 60'
-  wait_for 'apply to all' || return
+  wait_for 'select all' || return
   on_screen 'lazygit .*0\.66\.1 .*supported'
   on_screen 'lazysql .*0\.7\.0 .*supported'
   on_screen 'btop .*1\.3\.2 .*supported'

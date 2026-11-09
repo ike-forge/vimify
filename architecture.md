@@ -20,14 +20,16 @@ scan ──▶ select ──▶ plan ──▶ confirm ──▶ execute ──�
 
 1. **scan:** walk scan dirs, match binaries against port `binaries`. One progress
    tick per dir. Runs on a worker thread, events over a channel to the UI loop.
-2. **select:** `apply to all`, `apply to none`, then detected tools with status
-   (`applied`, `modified`, `update`). Initially checked: every supported tool not
-   in `exclusions`. Unsupported tools are greyed out at the bottom: they cannot be
-   checked and never enter `exclusions`, so they are offered once a port covers
-   them. `i` opens a modal with what the port covers.
-   A config pane left of the tools shows the theme and keys; `h`/`l` switch panes,
-   `i` edits a value. Edits are saved on accept, writing only the values that
-   changed, and plan with the edited reference's hash.
+2. **select:** `Apply changes`, `select all`, `select none`, then detected
+   tools with status (`applied`, `modified`, `update`). Enter on `Apply changes`
+   goes to confirm; on any other row it toggles. Initially checked: every
+   supported tool not in `exclusions`. Unsupported tools are greyed out at the
+   bottom: they cannot be checked and never enter `exclusions`, so they are
+   offered once a port covers them. `i` opens a modal with what the port covers.
+   A config pane left of the tools shows the theme and keys; `h`/`l` switch
+   panes, Enter edits a value, and the unfocused pane is dimmed. Edits are
+   saved on accept, writing only the values that changed, and plan with the
+   edited reference's hash.
 3. **plan:** checkboxes are desired state, diffed against state:
 
    | Checked | Applied | Op                         |

@@ -12,8 +12,8 @@ use crate::port::{self, Port};
 use crate::reference::Reference;
 use crate::scan::Detection;
 
-/// Rows above the tools: `apply to all`, `apply to none`.
-const ACTIONS: usize = 2;
+/// Rows above the tools: `Apply changes`, `select all`, `select none`.
+const ACTIONS: usize = 3;
 
 struct Tool {
     detection: Detection,
@@ -100,6 +100,7 @@ impl SelectScreen {
             return false;
         }
         match key {
+            KeyCode::Enter if self.focus == Focus::Tools && self.cursor == 0 => return true,
             KeyCode::Tab | KeyCode::BackTab => {
                 self.focus = match self.focus {
                     Focus::Config => Focus::Tools,
@@ -108,7 +109,6 @@ impl SelectScreen {
             }
             KeyCode::Char('h') | KeyCode::Left => self.focus = Focus::Config,
             KeyCode::Char('l') | KeyCode::Right => self.focus = Focus::Tools,
-            KeyCode::Enter => return true,
             _ if self.focus == Focus::Config => self.config.handle(key),
             _ => self.handle_tools(key),
         }
@@ -122,7 +122,7 @@ impl SelectScreen {
             KeyCode::Char('k') | KeyCode::Up => self.cursor = self.cursor.saturating_sub(1),
             KeyCode::Char('g') | KeyCode::Home => self.cursor = 0,
             KeyCode::Char('G') | KeyCode::End => self.cursor = last,
-            KeyCode::Char(' ') => self.toggle(),
+            KeyCode::Char(' ') | KeyCode::Enter => self.toggle(),
             KeyCode::Char('i') => self.info = self.cursor.checked_sub(ACTIONS),
             _ => {}
         }
@@ -150,8 +150,9 @@ impl SelectScreen {
 
     fn toggle(&mut self) {
         match self.cursor {
-            0 => self.set_all(true),
-            1 => self.set_all(false),
+            0 => {}
+            1 => self.set_all(true),
+            2 => self.set_all(false),
             i => {
                 let tool = &mut self.tools[i - ACTIONS];
                 tool.checked = tool.supported() && !tool.checked;
@@ -174,24 +175,25 @@ impl SelectScreen {
     }
 
     pub fn render(&self, frame: &mut Frame) {
-        let [title, hints, body] = Layout::vertical([
-            Constraint::Length(1),
-            Constraint::Length(2),
-            Constraint::Fill(1),
-        ])
-        .margin(1)
-        .areas(frame.area());
+        let [title, body] = Layout::vertical([Constraint::Length(2), Constraint::Fill(1)])
+            .margin(1)
+            .areas(frame.area());
         let [config, _, tools] = Layout::horizontal([
             Constraint::Length(config::WIDTH),
             Constraint::Length(2),
             Constraint::Fill(1),
         ])
         .areas(body);
-        let [header, list] =
-            Layout::vertical([Constraint::Length(2), Constraint::Fill(1)]).areas(tools);
+        let [header, hint, list] = Layout::vertical([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Fill(1),
+        ])
+        .areas(tools);
         let focused = self.focus == Focus::Tools;
         self.config.render(frame, config, !focused);
         frame.render_widget(heading("Applications", focused), header);
+        frame.render_widget(Line::from("i details").dim(), hint);
 
         let width = self
             .tools
@@ -200,9 +202,10 @@ impl SelectScreen {
             .max()
             .unwrap_or(0);
         let items = [
-            row(self.all_checked(), vec!["apply to all".into()]),
-            row(self.none_checked(), vec!["apply to none".into()]),
-            ListItem::new(Line::from("─".repeat(width.max(13) + 4)).dim()),
+            ListItem::new(Line::from(" Apply changes ".reversed())),
+            row(self.all_checked(), vec!["select all".into()]),
+            row(self.none_checked(), vec!["select none".into()]),
+            ListItem::new(Line::from("─".repeat(width.max("select none".len()) + 4)).dim()),
         ]
         .into_iter()
         .chain(self.tools.iter().map(|tool| {
@@ -237,7 +240,6 @@ impl SelectScreen {
 
         frame.render_widget(Line::from(vec!["vimify".bold(), " select".into()]), title);
         frame.render_stateful_widget(cursor_list(items.collect(), focused), list, &mut state);
-        frame.render_widget(Line::from(self.hints()), hints);
         if let Some(tool) = self.info.and_then(|i| self.tools.get(i)) {
             let row_width = self
                 .tools
@@ -257,34 +259,6 @@ impl SelectScreen {
             };
             render_info(frame, tool, anchor);
         }
-    }
-}
-
-impl SelectScreen {
-    fn hints(&self) -> Vec<Span<'static>> {
-        let keys: &[(&str, &str)] = if self.config.editing() {
-            &[("enter", "set"), ("esc", "cancel")]
-        } else if self.focus == Focus::Config {
-            &[
-                ("j/k", "move"),
-                ("i", "edit"),
-                ("l", "applications"),
-                ("enter", "review changes"),
-                ("q", "quit"),
-            ]
-        } else {
-            &[
-                ("j/k", "move"),
-                ("space", "toggle"),
-                ("i", "details"),
-                ("h", "config"),
-                ("enter", "review changes"),
-                ("q", "quit"),
-            ]
-        };
-        keys.iter()
-            .flat_map(|(key, label)| [key.bold(), format!(" {label}   ").dim()])
-            .collect()
     }
 }
 
@@ -438,9 +412,9 @@ mod tests {
     }
 
     #[test]
-    fn apply_to_none_then_all() {
+    fn select_none_then_all() {
         let mut s = screen(&["a", "b"], &[]);
-        press(&mut s, "j ");
+        press(&mut s, "jj ");
         assert!(s.none_checked());
         press(&mut s, "k ");
         assert!(s.all_checked());
@@ -449,7 +423,7 @@ mod tests {
     #[test]
     fn toggling_a_tool_updates_action_rows() {
         let mut s = screen(&["a", "b"], &[]);
-        press(&mut s, "jj ");
+        press(&mut s, "jjj ");
         assert_eq!(s.selection(), selection(&["b"], &["a"]));
         assert!(!s.all_checked() && !s.none_checked());
     }
@@ -460,11 +434,11 @@ mod tests {
         press(&mut s, "kkk");
         assert_eq!(s.cursor, 0);
         press(&mut s, "jjjjj");
-        assert_eq!(s.cursor, 2);
+        assert_eq!(s.cursor, 3);
         press(&mut s, "g");
         assert_eq!(s.cursor, 0);
         press(&mut s, "G");
-        assert_eq!(s.cursor, 2);
+        assert_eq!(s.cursor, 3);
     }
 
     #[test]
@@ -476,15 +450,15 @@ mod tests {
     #[test]
     fn unsupported_tools_cannot_be_toggled() {
         let mut s = mixed(&[], &["a"], &[]);
-        press(&mut s, "jj ");
+        press(&mut s, "jjj ");
         assert_eq!(s.selection(), selection(&[], &[]));
         assert!(!s.tools[0].checked);
     }
 
     #[test]
-    fn apply_to_all_skips_unsupported_tools() {
+    fn select_all_skips_unsupported_tools() {
         let mut s = mixed(&["a"], &["b"], &[]);
-        press(&mut s, "j ");
+        press(&mut s, "jj ");
         assert!(s.none_checked());
         press(&mut s, "k ");
         assert!(s.all_checked());
@@ -499,7 +473,7 @@ mod tests {
     }
 
     #[test]
-    fn with_nothing_supported_apply_to_all_is_not_checked() {
+    fn with_nothing_supported_select_all_is_not_checked() {
         assert!(!mixed(&[], &["a"], &[]).all_checked());
     }
 
@@ -508,7 +482,7 @@ mod tests {
         let mut s = screen(&["a"], &[]);
         press(&mut s, "i");
         assert!(!s.captures_input());
-        press(&mut s, "jji");
+        press(&mut s, "jjji");
         assert!(s.captures_input());
 
         assert!(!s.handle(KeyCode::Enter));
@@ -519,7 +493,7 @@ mod tests {
     #[test]
     fn keys_do_not_reach_the_list_while_the_modal_is_open() {
         let mut s = screen(&["a"], &[]);
-        press(&mut s, "jji ");
+        press(&mut s, "jjji ");
         assert!(s.tools[0].checked);
     }
 
@@ -564,16 +538,28 @@ mod tests {
     }
 
     #[test]
-    fn enter_confirms() {
+    fn enter_confirms_on_the_button_and_toggles_elsewhere() {
         let mut s = screen(&["a"], &[]);
-        assert!(!s.handle(KeyCode::Char('j')));
+        press(&mut s, "G");
+        assert!(!s.handle(KeyCode::Enter));
+        assert!(!s.tools[0].checked);
+        press(&mut s, "g");
         assert!(s.handle(KeyCode::Enter));
+    }
+
+    #[test]
+    fn enter_in_config_edits_instead_of_confirming() {
+        let mut s = screen(&["a"], &[]);
+        press(&mut s, "h");
+        assert!(!s.handle(KeyCode::Enter));
+        assert!(s.captures_input());
     }
 
     #[test]
     fn h_and_l_switch_panes_and_keys_follow_focus() {
         let mut s = screen(&["a"], &[]);
-        press(&mut s, "hjji");
+        press(&mut s, "hjj");
+        s.handle(KeyCode::Enter);
         assert!(s.captures_input());
         s.handle(KeyCode::Backspace);
         press(&mut s, "z");
@@ -586,7 +572,9 @@ mod tests {
     #[test]
     fn q_is_typed_while_editing() {
         let mut s = screen(&["a"], &[]);
-        press(&mut s, "hi");
+        press(&mut s, "h");
+        s.handle(KeyCode::Enter);
+        press(&mut s, "q");
         assert!(s.captures_input());
     }
 }

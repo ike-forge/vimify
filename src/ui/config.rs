@@ -62,7 +62,7 @@ impl ConfigPane {
             KeyCode::Char('k') | KeyCode::Up => self.cursor = self.cursor.saturating_sub(1),
             KeyCode::Char('g') | KeyCode::Home => self.cursor = 0,
             KeyCode::Char('G') | KeyCode::End => self.cursor = last,
-            KeyCode::Char('i') => {
+            KeyCode::Enter => {
                 self.input = Some(value(&self.reference, self.cursor).to_owned());
                 self.error = None;
             }
@@ -180,7 +180,7 @@ pub fn cursor_list(items: Vec<ListItem<'static>>, focused: bool) -> List<'static
         list.highlight_symbol("› ")
             .highlight_style(Style::new().bold())
     } else {
-        list.highlight_symbol("  ")
+        list.highlight_symbol("  ").style(Style::new().dim())
     }
 }
 
@@ -195,7 +195,7 @@ mod tests {
     }
 
     fn type_value(pane: &mut ConfigPane, value: &str) {
-        press(pane, "i");
+        pane.handle(KeyCode::Enter);
         for _ in 0..30 {
             pane.handle(KeyCode::Backspace);
         }
@@ -233,7 +233,9 @@ mod tests {
     #[test]
     fn esc_discards_the_input() {
         let mut pane = ConfigPane::new(Reference::default());
-        press(&mut pane, "jjiq");
+        press(&mut pane, "jj");
+        pane.handle(KeyCode::Enter);
+        press(&mut pane, "q");
         pane.handle(KeyCode::Esc);
         assert!(!pane.editing());
         assert_eq!(pane.reference().keys["down"], "j");
@@ -242,7 +244,8 @@ mod tests {
     #[test]
     fn typing_does_not_move_the_cursor() {
         let mut pane = ConfigPane::new(Reference::default());
-        press(&mut pane, "ijjj");
+        pane.handle(KeyCode::Enter);
+        press(&mut pane, "jjj");
         assert_eq!(pane.cursor, 0);
     }
 }
