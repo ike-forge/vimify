@@ -8,8 +8,8 @@ use ratatui::widgets::{HighlightSpacing, List, ListItem, ListState, Paragraph, W
 use crate::reference::Reference;
 use crate::{actions, palette};
 
-/// Fits `catppuccin-frappe` and the edit cursor.
-pub const WIDTH: u16 = 30;
+/// Fits the longest theme name with the cursor and the changed marker.
+pub const WIDTH: u16 = 32;
 
 /// Edits are kept here until the user accepts the plan, which saves them.
 pub struct ConfigPane {
@@ -112,7 +112,7 @@ impl ConfigPane {
         let [header, list, error] = Layout::vertical([
             Constraint::Length(2),
             Constraint::Fill(1),
-            Constraint::Length(3),
+            Constraint::Length(6),
         ])
         .areas(area);
         frame.render_widget(heading("Config", focused), header);
@@ -186,6 +186,9 @@ pub fn cursor_list(items: Vec<ListItem<'static>>, focused: bool) -> List<'static
 
 #[cfg(test)]
 mod tests {
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+
     use super::*;
 
     fn press(pane: &mut ConfigPane, keys: &str) {
@@ -228,6 +231,40 @@ mod tests {
         type_value(&mut pane, "nope");
         assert!(pane.editing());
         assert_eq!(pane.reference().theme, Reference::default().theme);
+    }
+
+    fn draw(pane: &ConfigPane) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(WIDTH, 20)).unwrap();
+        terminal
+            .draw(|frame| pane.render(frame, frame.area(), true))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        buffer
+            .content()
+            .chunks(buffer.area.width as usize)
+            .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>() + "\n")
+            .collect()
+    }
+
+    #[test]
+    fn longest_theme_fits() {
+        let longest = palette::names()
+            .into_iter()
+            .max_by_key(|n| n.len())
+            .unwrap();
+        let mut pane = ConfigPane::new(Reference::default());
+        type_value(&mut pane, longest);
+        assert!(draw(&pane).contains(&format!("{longest} *")));
+    }
+
+    #[test]
+    fn unknown_theme_lists_every_theme() {
+        let mut pane = ConfigPane::new(Reference::default());
+        type_value(&mut pane, "nope");
+        let screen = draw(&pane).replace('\n', " ");
+        for name in palette::names() {
+            assert!(screen.contains(name), "{name} missing from\n{screen}");
+        }
     }
 
     #[test]

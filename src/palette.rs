@@ -83,6 +83,10 @@ mod tests {
     fn embedded_palettes_parse() {
         let palette = load("catppuccin-frappe").unwrap();
         assert_eq!(palette.role("accent"), Some("#8caaee"));
+        assert_eq!(names().len(), 6);
+        for name in names() {
+            load(name).unwrap();
+        }
     }
 
     #[test]

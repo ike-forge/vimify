@@ -64,6 +64,9 @@ quit = "q"
 extra_paths = ["~/tools/bin"]
 ```
 
+Themes: `catppuccin-latte`, `catppuccin-frappe`, `catppuccin-macchiato`,
+`catppuccin-mocha`, `solarized-light`, `solarized-dark`.
+
 Commit it to your dotfiles. Committing the generated tool configs is only useful
 if you also edit them outside vimify.
 
