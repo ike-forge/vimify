@@ -12,6 +12,15 @@
 | Plan          | List of file operations computed from reference + ports + state; shown before anything is written |
 | State         | What vimify applied, per tool. Drives status and revert              |
 
+## Commands
+
+| Command           | Does                                                              |
+| ----------------- | ----------------------------------------------------------------- |
+| `vimify`          | Prints help                                                       |
+| `vimify config`   | Edits theme and keys. Saves only; applied tools plan as `update` on the next apply |
+| `vimify apply`    | The flow below                                                    |
+| `vimify rollback` | Lists applied tools, all unchecked; checked ones revert through confirm and execute, and join `exclusions`. No scan: revert needs only state |
+
 ## Flow
 
 ```
@@ -26,10 +35,6 @@ scan ──▶ select ──▶ plan ──▶ confirm ──▶ execute ──�
    supported tool not in `exclusions`. Unsupported tools are greyed out at the
    bottom: they cannot be checked and never enter `exclusions`, so they are
    offered once a port covers them. `i` opens a modal with what the port covers.
-   A config pane left of the tools shows the theme and keys; `h`/`l` switch
-   panes, Enter edits a value, and the unfocused pane is dimmed. Edits are
-   saved on accept, writing only the values that changed, and plan with the
-   edited reference's hash.
 3. **plan:** checkboxes are desired state, diffed against state:
 
    | Checked | Applied | Op                         |
@@ -213,7 +218,7 @@ without a terminal.
 
 ```
 src/
-  main.rs       terminal setup, run ui
+  main.rs       subcommands, run ui
   reference.rs  load/save reference config
   actions.rs    action vocabulary, key notations
   palette.rs    roles, embedded palettes
@@ -225,7 +230,7 @@ src/
   backup.rs     copy to first free .bak name
   apply.rs      strategies, atomic write, revert
   state.rs      applied-state store
-  ui/           ratatui screens: scan, select, confirm, result
+  ui/           ratatui screens: config, scan, select, rollback, confirm
 ```
 
 ## Testing

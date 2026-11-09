@@ -28,13 +28,15 @@ managers.
 ## Usage
 
 ```sh
-vimify            # scan, select tools, apply
+vimify config     # edit theme and keys
+vimify apply      # scan, select tools, apply
+vimify rollback   # take vimify's keys back out of selected tools
 ```
 
 ![The tool list after the scan](docs/img/select.png)
 
 From the tool list you can install or revert vimify's config per tool, or for
-all supported tools at once (recommended).
+all supported tools at once (recommended). `rollback` lists only applied tools.
 
 ![The confirm screen lists every file before anything is written](docs/img/confirm.png)
 
