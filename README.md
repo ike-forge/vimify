@@ -69,8 +69,9 @@ if you also edit them outside vimify.
 
 ## Supported tools
 
-bat, btop, k9s, lazydocker, lazygit, lazysql, lfk, stu and yazi. Coverage varies with
-what each tool lets you configure: see [support.md](support.md).
+lazygit, yazi, lazysql, stu, btop, lfk, k9s, lazydocker and bat, from most to least
+covered. Coverage varies with what each tool lets you configure: see
+[support.md](support.md).
 
 See [vision.md](vision.md) for the longer-term direction.
 
