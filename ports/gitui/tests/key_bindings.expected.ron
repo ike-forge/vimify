@@ -3,8 +3,13 @@
     move_left: Some(( code: Char('h'), modifiers: "")),
     open_help: Some(( code: Char('?'), modifiers: "")),
     copy: Some(( code: Char('y'), modifiers: "")),
+    delete_branch: Some(( code: Char('d'), modifiers: "")),
+    delete_tag: Some(( code: Char('d'), modifiers: "")),
+    diff_reset_lines: Some(( code: Char('d'), modifiers: "")),
     move_down: Some(( code: Char('j'), modifiers: "")),
     move_right: Some(( code: Char('l'), modifiers: "")),
     move_up: Some(( code: Char('k'), modifiers: "")),
     quit: Some(( code: Char('q'), modifiers: "")),
+    stash_drop: Some(( code: Char('d'), modifiers: "")),
+    status_reset_item: Some(( code: Char('d'), modifiers: "")),
 )

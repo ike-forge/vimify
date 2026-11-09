@@ -1,8 +1,8 @@
 schema = 1
-version = "0.1.0"
+version = "0.2.0"
 binaries = ["gitui"]
 versions = ">=0.28"
-notes = "gitui binds one key per move, so the arrow keys stop moving. Help moves from h to ?, since h is left. delete is not mapped: gitui spreads discarding and deleting over several keys."
+notes = "gitui binds one key per move, so the arrow keys stop moving. Help moves from h to ?, since h is left. delete takes discard, reset lines, drop stash and delete branch or tag, each confirmed first."
 
 [[target]]
 format = "ron"
@@ -19,6 +19,11 @@ move_down = "down"
 move_up = "up"
 move_right = "right"
 copy = "yank"
+status_reset_item = "delete"
+diff_reset_lines = "delete"
+stash_drop = "delete"
+delete_branch = "delete"
+delete_tag = "delete"
 quit = "quit"
 
 # gitui's help is on h, which left takes.

@@ -12,16 +12,25 @@ Copy = "y" # my own binding
 Refresh = "r"
 Delete = "d"
 
+[keymap.Connection]
+DeleteConnection = "d"
+Quit = "q"
+
+[keymap.Home]
+Quit = "q"
+
 [keymap.JSONViewer]
 Copy = "y"
 
 [keymap.QueryHistory]
 Copy = "y"
 Delete = "d"
+Quit = "q"
 
 [keymap.QueryPreview]
 Copy = "y"
 Delete = "d"
+Quit = "q"
 
 [keymap.Sidebar]
 Copy = "y"
