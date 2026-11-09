@@ -59,7 +59,7 @@ close() { tmux -u kill-server 2>/dev/null; }
 reset() {
   close
   rm -rf ~/.config/lazygit ~/.config/lazydocker ~/.config/lfk ~/.config/lazysql \
-    ~/.config/bat ~/.config/btop ~/.config/k9s ~/.config/yazi ~/.stu ~/.config/lesskey \
+    ~/.config/bat ~/.config/btop ~/.config/k9s ~/.config/yazi ~/.stu ~/.config/lesskey ~/.config/gitui \
     ~/.config/vimify ~/.local/state/vimify ~/.cache/vimify
   mkdir -p ~/.config/lazysql
   cp /tmp/lazysql.seed "$LAZYSQL"
@@ -541,6 +541,33 @@ test_less_honours_what_vimify_wrote() {
   close
   revert
   absent ~/.config/lesskey
+}
+
+test_gitui_honours_what_vimify_wrote() {
+  reset
+  mkdir -p ~/.config/vimify
+  printf '[keys]\nquit = "Q"\n' >"$REFERENCE"
+  apply
+  close
+  tmux -u new-session -d -s app -x 150 -y 40 -c ~/git-repo 'gitui; echo EXIT=$?; sleep 60'
+  wait_for 'Unstaged Changes' || return
+  # h is left, so help moved to ?.
+  tmux -u send-keys -t app h
+  sleep 0.7
+  off_screen 'Help: all commands'
+  tmux -u send-keys -t app '?'
+  wait_for 'Help: all commands' || return
+  tmux -u send-keys -t app Escape
+  sleep 0.5
+  # q no longer quits; the rebound Q does.
+  tmux -u send-keys -t app q
+  sleep 0.7
+  off_screen 'EXIT='
+  tmux -u send-keys -t app Q
+  wait_for 'EXIT=0' || return
+  close
+  revert
+  absent ~/.config/gitui/key_bindings.ron
 }
 
 # stu refuses to start on a key it cannot parse, and its help lists every binding.
