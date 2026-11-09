@@ -1,5 +1,5 @@
 schema = 1
-version = "0.1.0"
+version = "0.2.0"
 binaries = ["lazysql"]
 versions = ">=0.7"
 notes = "left and right are not mapped: H and L switch panes, and h and l move between cells."
@@ -25,6 +25,11 @@ paths = ["$XDG_CONFIG_HOME/lazysql/config.toml"]
 "keymap.QueryHistory.Copy" = "yank"
 "keymap.QueryHistory.Delete" = "delete"
 "keymap.JSONViewer.Copy" = "yank"
+"keymap.Connection.DeleteConnection" = "delete"
+"keymap.Home.Quit" = "quit"
+"keymap.Connection.Quit" = "quit"
+"keymap.QueryPreview.Quit" = "quit"
+"keymap.QueryHistory.Quit" = "quit"
 
 [target.theme]
 "theme.Colors.PrimitiveBackground" = "{base}"

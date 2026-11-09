@@ -11,15 +11,15 @@ blank: the tool has no such action
 | ---------- | -------- | :--: | :--: | :--: | :---: | :--: | :----: | :--: | :---: |
 | lazygit    | ≥ 0.66   |  ✅  |  ✅  |  ✅  |  ✅   |  ✅  |   ✅   |  ✅  |  ✅   |
 | yazi       | ≥ 26.9   |  ✅  |  ✅  |  ✅  |  ✅   |  ✅  |   ✅   |  ✅  |  ✅   |
-| gitui      | ≥ 0.28   |  ✅  |  ✅  |  ✅  |  ✅   |  ✅  |   ❌   |  ✅  |  ✅   |
-| lazysql    | ≥ 0.7    |  ❌  |  ✅  |  ✅  |  ❌   |  ✅  |   ✅   |  ❌  |  ✅   |
+| gitui      | ≥ 0.28   |  ✅  |  ✅  |  ✅  |  ✅   |  ✅  |   ✅   |  ✅  |  ✅   |
+| lfk        | ≥ 0.19   |  ✅  |  ✅  |  ✅  |  ✅   |  ✅  |   ✅   |  ➖  |  ✅   |
+| lazysql    | ≥ 0.7    |  ❌  |  ✅  |  ✅  |  ❌   |  ✅  |   ✅   |  ✅  |  ✅   |
 | less       | ≥ 582    |  ✅  |  ✅  |  ✅  |  ✅   |      |        |  ✅  |  ❌   |
 | stu        | ≥ 0.7    |  🟡  |  ✅  |  ✅  |  🟡   |  ✅  |        |  ❌  |  ➖   |
 | lazydocker | ≥ 0.25   |  ➖  |  ➖  |  ➖  |  ➖   |      |   ➖   |  ➖  |  ✅   |
 | btop       | ≥ 1.3    |  ➖  |  ➖  |  ➖  |  ➖   |      |        |  ➖  |  ✅   |
 | bat        | ≥ 0.25   |  ➖  |  ➖  |  ➖  |  ➖   |      |        |  ➖  |  🟡   |
-| lfk        | ≥ 0.19   |  ➖  |  ➖  |  ➖  |  ➖   |  ❌  |   ❌   |  ❌  |  ✅   |
-| k9s        | ≥ 0.40   |  ❌  |  ➖  |  ➖  |  ❌   |  ❌  |   ❌   |  ❌  |  ✅   |
+| k9s        | ≥ 0.40   |  ➖  |  ➖  |  ➖  |  ➖   |  ➖  |   ➖   |  ➖  |  ✅   |
 
 Outside its range a tool still gets the nearest port, shown as `untested` on another
 major version ([architecture.md](architecture.md#sources-and-versioning)).
@@ -31,7 +31,8 @@ major version ([architecture.md](architecture.md#sources-and-versioning)).
   their own. A keymap written as `[[mgr.prepend_keymap]]` tables is refused: use the
   inline array.
 - **gitui**: one key per move, so the arrow keys stop moving. Help moves from h to ?.
-  delete is not mapped: gitui spreads discarding and deleting over several keys.
+  delete takes discard, reset lines, drop stash and delete branch or tag, which all
+  confirm first.
 - **lazysql**: left and right not mapped: H and L switch panes, h and l move between
   cells.
 - **stu**: left and right scroll and switch tabs in the detail, preview and dialog
@@ -40,9 +41,10 @@ major version ([architecture.md](architecture.md#sources-and-versioning)).
   stu quits on that key even while typing a filter. Colours are built in.
 - **btop**: keys are btop's vim mode, hardcoded to h, j, k and l. Rebinding them in
   the reference has no effect. btop rewrites `btop.conf` on exit and drops comments.
-- **lfk**: theme only; navigation is fixed, and resource deletion stays on D.
-- **k9s**: theme only, through a `vimify` skin. j and k are built in. A skin set per
-  cluster or context wins over it.
+- **lfk**: quit stays on q, which lfk hardcodes. delete takes resource deletion, which
+  confirms first, and diff moves from d to D.
+- **k9s**: theme only, through a `vimify` skin. k9s has no keymap; j and k are built in.
+  A skin set per cluster or context wins over it.
 - **lazydocker**: theme only; it has no configurable keybindings. Its own h, j, k, l, d
   and q are already vim's.
 - **bat**: no keybindings; output longer than a screen pages through less, so its keys

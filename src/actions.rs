@@ -34,6 +34,8 @@ pub enum Notation {
     Stu,
     /// less's lesskey file: `^U`, `\e` for alt, `\kd` for arrows.
     Lesskey,
+    /// Bubble Tea v2: `ctrl+u`, `alt+x`, `space`, `pgdown`.
+    Plus,
     /// The tool spells keys as the reference does.
     Vim,
 }
@@ -47,6 +49,7 @@ impl Notation {
             Notation::Gitui => gitui(key),
             Notation::Stu => stu(key),
             Notation::Lesskey => lesskey(key),
+            Notation::Plus => plus(key),
             Notation::Vim => Some(key.to_owned()),
         }
     }
@@ -79,6 +82,22 @@ fn angle(key: &str) -> Option<String> {
         _ => return None,
     };
     Some(format!("<{name}>"))
+}
+
+/// Bubble Tea's names match the angle ones.
+fn plus(key: &str) -> Option<String> {
+    if key == " " {
+        return Some("space".to_owned());
+    }
+    let angled = angle(key)?;
+    let Some(inner) = angled.strip_prefix('<').and_then(|k| k.strip_suffix('>')) else {
+        return Some(angled);
+    };
+    Some(match inner.split_once('-') {
+        Some(("c", ch)) => format!("ctrl+{ch}"),
+        Some(("a", ch)) => format!("alt+{ch}"),
+        _ => inner.to_owned(),
+    })
 }
 
 fn gitui(key: &str) -> Option<String> {
@@ -276,6 +295,19 @@ mod tests {
         assert_eq!(lesskey("<PageUp>").as_deref(), Some("\\kU"));
         assert_eq!(lesskey("<F1>"), None);
         assert_eq!(lesskey("é"), None);
+    }
+
+    #[test]
+    fn plus_spells_modifiers_and_names() {
+        let plus = |k| Notation::Plus.convert(k);
+        assert_eq!(plus("j").as_deref(), Some("j"));
+        assert_eq!(plus("D").as_deref(), Some("D"));
+        assert_eq!(plus(" ").as_deref(), Some("space"));
+        assert_eq!(plus("<C-u>").as_deref(), Some("ctrl+u"));
+        assert_eq!(plus("<A-x>").as_deref(), Some("alt+x"));
+        assert_eq!(plus("<PageDown>").as_deref(), Some("pgdown"));
+        assert_eq!(plus("<CR>").as_deref(), Some("enter"));
+        assert_eq!(plus("<F1>"), None);
     }
 
     #[test]

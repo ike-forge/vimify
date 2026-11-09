@@ -17,3 +17,10 @@ theme:
   warning: '#e5c890'
 keybindings:
   logs: "ctrl+l"
+  copy_name: y
+  delete: d
+  down: j
+  left: h
+  right: l
+  up: k
+  diff: D

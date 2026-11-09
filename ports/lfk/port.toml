@@ -1,16 +1,28 @@
 schema = 1
-version = "0.1.0"
+version = "0.2.0"
 binaries = ["lfk"]
 versions = ">=0.19"
 
-notes = "Theme only: lfk's navigation is fixed, and vimify leaves resource deletion on D."
+notes = "quit stays on q: lfk hardcodes it. Diff moves from d to D, which delete frees."
 
 [[target]]
 format = "yaml"
 strategy = "edit"
+key_notation = "plus"
 paths = ["$LFK_CONFIG_DIR/config.yaml", "$XDG_CONFIG_HOME/lfk/config.yaml"]
 
+# lfk keeps the arrow keys bound next to these.
+[target.keys]
+"keybindings.left" = "left"
+"keybindings.down" = "down"
+"keybindings.up" = "up"
+"keybindings.right" = "right"
+"keybindings.copy_name" = "yank"
+"keybindings.delete" = "delete"
+
 [target.theme]
+# Diff defaults to d, the default delete key.
+"keybindings.diff" = "D"
 "theme.primary" = "{accent}"
 "theme.secondary" = "{success}"
 "theme.text" = "{text}"

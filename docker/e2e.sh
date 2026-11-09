@@ -336,8 +336,10 @@ test_lost_backup_refuses_to_revert() {
   in_file "$STATE" 'lazygit'
 }
 
+# The first row in $row_colour at or below $min_row.
+min_row=1
 selected_row() {
-  screen -e | grep -an "$row_colour" | cut -d: -f1 | head -1
+  screen -e | grep -an "$row_colour" | cut -d: -f1 | awk -v min="$min_row" '$1 >= min { print; exit }'
 }
 
 press() {
@@ -484,6 +486,54 @@ test_lfk_shows_the_palette() {
   ! screen -e | grep -aq '122;162;247' || fail 'default theme still on screen'
 }
 
+test_lfk_honours_what_vimify_wrote() {
+  reset
+  mkdir -p ~/.config/vimify
+  printf '[keys]\ndown = "m"\n' >"$REFERENCE"
+  apply
+  close
+  in_file ~/.config/lfk/config.yaml 'diff: D'
+  tmux -u new-session -d -s app -x 150 -y 40 "$TRUECOLOR lfk --demo; sleep 60"
+  wait_for 'DEMO' || return
+  sleep 2
+  # The demo opens on a one-entry context list; l enters it.
+  tmux -u send-keys -t app l
+  wait_for 'Monitoring' || return
+  sleep 1
+  row_colour=$ACCENT_BG
+  # Row 1 is lfk's title bar, also in the accent colour.
+  min_row=2
+  local start
+  start=$(selected_row)
+  [ -n "$start" ] || fail 'accent colour not on the selected row'
+  local next=$((start + 1))
+  press m "$next"
+  press k "$start"
+  press Down "$next"
+  press Up "$start"
+  press j "$start"
+  min_row=1
+}
+
+# Bound to a key lazysql leaves free, so only the config can make it quit.
+test_lazysql_quits_on_the_reference_key() {
+  reset
+  mkdir -p ~/.config/vimify
+  printf '[keys]\nquit = "Q"\n' >"$REFERENCE"
+  apply
+  close
+  tmux -u new-session -d -s app -x 150 -y 40 "lazysql --no-telemetry; echo EXIT=\$?; sleep 60"
+  wait_for 'demo' || return
+  tmux -u send-keys -t app q
+  sleep 0.7
+  off_screen 'Exit LazySQL'
+  off_screen 'EXIT='
+  tmux -u send-keys -t app Q
+  sleep 0.7
+  screen | grep -qE 'Exit LazySQL|EXIT=' || fail 'Q did not quit'
+  close
+}
+
 test_every_file_of_a_tool_is_applied_and_reverted() {
   reset
   mkdir -p ~/.config/yazi
@@ -622,6 +672,22 @@ test_gitui_honours_what_vimify_wrote() {
   close
   revert
   absent ~/.config/gitui/key_bindings.ron
+}
+
+test_gitui_discards_on_the_delete_key() {
+  reset
+  apply
+  close
+  tmux -u new-session -d -s app -x 150 -y 40 -c ~/git-repo 'gitui; sleep 60'
+  wait_for 'Unstaged Changes' || return
+  tmux -u send-keys -t app d
+  wait_for 'confirm file reset' || return
+  # Cancelled: the README change stays.
+  tmux -u send-keys -t app Escape
+  sleep 0.5
+  off_screen 'confirm file reset'
+  close
+  grep -q 'Work in progress' ~/git-repo/README.md || fail 'README change lost'
 }
 
 # stu refuses to start on a key it cannot parse, and its help lists every binding.
