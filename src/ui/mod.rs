@@ -1,3 +1,4 @@
+mod config;
 mod confirm;
 mod scan;
 mod select;
@@ -11,6 +12,7 @@ use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, Ke
 
 use crate::plan::{self, Op};
 use crate::port::Port;
+use crate::reference::Reference;
 use crate::state::State;
 use confirm::{Choice, ConfirmScreen};
 use scan::ScanScreen;
@@ -22,6 +24,8 @@ pub struct Outcome {
     pub exclusions: Vec<String>,
     /// The port each detected tool resolved to.
     pub ports: Vec<Port>,
+    /// With the user's edits from the config pane, not yet saved.
+    pub reference: Reference,
 }
 
 /// A scan that finishes within this window never shows its progress screen.
@@ -38,19 +42,11 @@ enum Screen {
 pub fn run(
     dirs: Vec<PathBuf>,
     ports: Vec<Port>,
-    exclusions: &[String],
+    reference: &Reference,
     state: &State,
-    reference_hash: &str,
 ) -> Result<Option<Outcome>> {
     let mut terminal = ratatui::init();
-    let result = event_loop(
-        &mut terminal,
-        dirs,
-        ports,
-        exclusions,
-        state,
-        reference_hash,
-    );
+    let result = event_loop(&mut terminal, dirs, ports, reference, state);
     ratatui::restore();
     result
 }
@@ -59,9 +55,8 @@ fn event_loop(
     terminal: &mut DefaultTerminal,
     dirs: Vec<PathBuf>,
     ports: Vec<Port>,
-    exclusions: &[String],
+    reference: &Reference,
     state: &State,
-    reference_hash: &str,
 ) -> Result<Option<Outcome>> {
     let mut screen = Screen::Scan(ScanScreen::new(dirs.len()));
     let rx = crate::scan::spawn(dirs, ports.clone());
@@ -72,8 +67,11 @@ fn event_loop(
                 scan.update(ev);
             }
             if scan.finished() && !scan.found().is_empty() {
-                screen =
-                    Screen::Select(SelectScreen::new(scan.found().to_vec(), exclusions, &ports));
+                screen = Screen::Select(SelectScreen::new(
+                    scan.found().to_vec(),
+                    &ports,
+                    reference.clone(),
+                ));
             }
         }
         terminal.draw(|f| match &screen {
@@ -96,7 +94,7 @@ fn event_loop(
         }
         let esc_quits = !matches!(screen, Screen::Confirm(..));
         // `q` and Esc close the modal first.
-        let modal = matches!(&screen, Screen::Select(s) if s.modal_open());
+        let modal = matches!(&screen, Screen::Select(s) if s.captures_input());
         let quit = key.code == KeyCode::Char('q') || (esc_quits && key.code == KeyCode::Esc);
         if is_ctrl_c(&key) || (quit && !modal) {
             return Ok(None);
@@ -106,8 +104,8 @@ fn event_loop(
                 if s.handle(key.code) {
                     let selection = s.selection();
                     let confirm = ConfirmScreen {
-                        ops: plan::plan(&selection, &s.ports(), state, reference_hash),
-                        exclusions: plan::exclusions(exclusions, &selection),
+                        ops: plan::plan(&selection, &s.ports(), state, &s.reference().hash()?),
+                        exclusions: plan::exclusions(&reference.exclusions, &selection),
                     };
                     Screen::Confirm(s, confirm)
                 } else {
@@ -120,6 +118,7 @@ fn event_loop(
                         ops: c.ops,
                         exclusions: c.exclusions,
                         ports: s.ports(),
+                        reference: s.reference().clone(),
                     }));
                 }
                 Some(Choice::Back) => Screen::Select(s),

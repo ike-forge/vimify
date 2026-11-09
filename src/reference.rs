@@ -4,13 +4,13 @@ use std::{fs, io};
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
-use toml_edit::{Array, DocumentMut, value};
+use toml_edit::{Array, DocumentMut, table, value};
 
 use crate::{actions, fsx, paths, state};
 
 const DEFAULT_THEME: &str = "catppuccin-frappe";
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct Reference {
     pub theme: String,
@@ -20,7 +20,7 @@ pub struct Reference {
     pub exclusions: Vec<String>,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
 pub struct Scan {
     pub extra_paths: Vec<String>,
@@ -94,10 +94,19 @@ fn parse(text: &str) -> Result<Reference> {
 
 /// Rewrites only `exclusions`; the rest of the user's file is untouched.
 pub fn save_exclusions(exclusions: &[String]) -> Result<()> {
+    update(|text| with_exclusions(text, exclusions))
+}
+
+/// Writes only the theme and keys that differ from `before`, so defaults the user
+/// never set stay out of the file.
+pub fn save_settings(before: &Reference, after: &Reference) -> Result<()> {
+    update(|text| with_settings(text, before, after))
+}
+
+fn update(edit: impl FnOnce(&str) -> Result<String>) -> Result<()> {
     let path = path().context("cannot resolve vimify config path")?;
     let text = read(&path)?.unwrap_or_default();
-    let updated =
-        with_exclusions(&text, exclusions).with_context(|| format!("{}", path.display()))?;
+    let updated = edit(&text).with_context(|| format!("{}", path.display()))?;
     if updated != text {
         fsx::write_atomic(&path, &updated).with_context(|| format!("{}", path.display()))?;
     }
@@ -118,6 +127,25 @@ fn with_exclusions(text: &str, exclusions: &[String]) -> Result<String> {
         return Ok(text.to_owned());
     }
     doc["exclusions"] = value(exclusions.iter().map(String::as_str).collect::<Array>());
+    Ok(doc.to_string())
+}
+
+fn with_settings(text: &str, before: &Reference, after: &Reference) -> Result<String> {
+    let mut doc: DocumentMut = text.parse()?;
+    if after.theme != before.theme {
+        doc["theme"] = value(after.theme.as_str());
+    }
+    for (action, key) in &after.keys {
+        if before.keys.get(action) == Some(key) {
+            continue;
+        }
+        let keys = doc
+            .entry("keys")
+            .or_insert(table())
+            .as_table_like_mut()
+            .context("keys is not a table")?;
+        keys.insert(action, value(key.as_str()));
+    }
     Ok(doc.to_string())
 }
 
@@ -204,5 +232,41 @@ mod tests {
     fn clearing_keeps_an_empty_list() {
         let out = with_exclusions("exclusions = [\"a\"]\n", &[]).unwrap();
         assert_eq!(out, "exclusions = []\n");
+    }
+
+    fn edited(text: &str, edit: impl FnOnce(&mut Reference)) -> String {
+        let before = parse(text).unwrap();
+        let mut after = before.clone();
+        edit(&mut after);
+        with_settings(text, &before, &after).unwrap()
+    }
+
+    #[test]
+    fn settings_write_only_what_changed() {
+        let text = "# mine\ntheme = \"catppuccin-frappe\" # keep\n\n[keys]\nup = \"k\"\n";
+        let out = edited(text, |r| {
+            r.keys.insert("down".into(), "n".into());
+        });
+        assert_eq!(
+            out,
+            "# mine\ntheme = \"catppuccin-frappe\" # keep\n\n[keys]\nup = \"k\"\ndown = \"n\"\n"
+        );
+    }
+
+    #[test]
+    fn settings_create_keys_table_and_theme() {
+        let out = edited("exclusions = []\n", |r| {
+            r.theme = "other".into();
+            r.keys.insert("quit".into(), "Q".into());
+        });
+        assert_eq!(
+            out,
+            "exclusions = []\ntheme = \"other\"\n\n[keys]\nquit = \"Q\"\n"
+        );
+    }
+
+    #[test]
+    fn unchanged_settings_leave_file_untouched() {
+        assert_eq!(edited("", |_| {}), "");
     }
 }

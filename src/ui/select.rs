@@ -1,13 +1,15 @@
 use ratatui::Frame;
 use ratatui::crossterm::event::KeyCode;
 use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::style::{Style, Stylize};
+use ratatui::style::Stylize;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Clear, List, ListItem, ListState, Paragraph, Wrap};
+use ratatui::widgets::{Block, Clear, ListItem, ListState, Paragraph, Wrap};
 
+use super::config::{self, ConfigPane, cursor_list, heading};
 use crate::paths;
 use crate::plan::Selection;
 use crate::port::{self, Port};
+use crate::reference::Reference;
 use crate::scan::Detection;
 
 /// Rows above the tools: `apply to all`, `apply to none`.
@@ -27,7 +29,15 @@ impl Tool {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Focus {
+    Config,
+    Tools,
+}
+
 pub struct SelectScreen {
+    config: ConfigPane,
+    focus: Focus,
     tools: Vec<Tool>,
     cursor: usize,
     /// Index into `tools` of the tool shown in the info modal.
@@ -36,7 +46,8 @@ pub struct SelectScreen {
 
 impl SelectScreen {
     /// Supported tools first, so the greyed-out ones collect at the bottom.
-    pub fn new(found: Vec<Detection>, exclusions: &[String], ports: &[Port]) -> Self {
+    pub fn new(found: Vec<Detection>, ports: &[Port], reference: Reference) -> Self {
+        let exclusions = &reference.exclusions;
         let mut tools: Vec<Tool> = found
             .into_iter()
             .map(|detection| {
@@ -55,6 +66,8 @@ impl SelectScreen {
             .collect();
         tools.sort_by_key(|t| (!t.supported(), t.detection.port.clone()));
         Self {
+            config: ConfigPane::new(reference),
+            focus: Focus::Tools,
             tools,
             cursor: 0,
             info: None,
@@ -66,8 +79,14 @@ impl SelectScreen {
         self.tools.iter().filter_map(|t| t.port.clone()).collect()
     }
 
-    pub fn modal_open(&self) -> bool {
-        self.info.is_some()
+    /// The reference with the user's edits from the config pane.
+    pub fn reference(&self) -> &Reference {
+        self.config.reference()
+    }
+
+    /// A modal or a text input takes every key, `q` and Esc included.
+    pub fn captures_input(&self) -> bool {
+        self.info.is_some() || self.config.editing()
     }
 
     /// Returns true on confirm.
@@ -76,6 +95,27 @@ impl SelectScreen {
             self.info = None;
             return false;
         }
+        if self.config.editing() {
+            self.config.handle(key);
+            return false;
+        }
+        match key {
+            KeyCode::Tab | KeyCode::BackTab => {
+                self.focus = match self.focus {
+                    Focus::Config => Focus::Tools,
+                    Focus::Tools => Focus::Config,
+                };
+            }
+            KeyCode::Char('h') | KeyCode::Left => self.focus = Focus::Config,
+            KeyCode::Char('l') | KeyCode::Right => self.focus = Focus::Tools,
+            KeyCode::Enter => return true,
+            _ if self.focus == Focus::Config => self.config.handle(key),
+            _ => self.handle_tools(key),
+        }
+        false
+    }
+
+    fn handle_tools(&mut self, key: KeyCode) {
         let last = ACTIONS + self.tools.len() - 1;
         match key {
             KeyCode::Char('j') | KeyCode::Down => self.cursor = (self.cursor + 1).min(last),
@@ -84,10 +124,8 @@ impl SelectScreen {
             KeyCode::Char('G') | KeyCode::End => self.cursor = last,
             KeyCode::Char(' ') => self.toggle(),
             KeyCode::Char('i') => self.info = self.cursor.checked_sub(ACTIONS),
-            KeyCode::Enter => return true,
             _ => {}
         }
-        false
     }
 
     /// Unsupported tools are in neither list: they are not the user's exclusions, and
@@ -136,13 +174,24 @@ impl SelectScreen {
     }
 
     pub fn render(&self, frame: &mut Frame) {
-        let [title, hints, list] = Layout::vertical([
+        let [title, hints, body] = Layout::vertical([
             Constraint::Length(1),
             Constraint::Length(2),
             Constraint::Fill(1),
         ])
         .margin(1)
         .areas(frame.area());
+        let [config, _, tools] = Layout::horizontal([
+            Constraint::Length(config::WIDTH),
+            Constraint::Length(2),
+            Constraint::Fill(1),
+        ])
+        .areas(body);
+        let [header, list] =
+            Layout::vertical([Constraint::Length(2), Constraint::Fill(1)]).areas(tools);
+        let focused = self.focus == Focus::Tools;
+        self.config.render(frame, config, !focused);
+        frame.render_widget(heading("Applications", focused), header);
 
         let width = self
             .tools
@@ -187,14 +236,8 @@ impl SelectScreen {
         let mut state = ListState::default().with_selected(Some(index));
 
         frame.render_widget(Line::from(vec!["vimify".bold(), " select".into()]), title);
-        frame.render_stateful_widget(
-            List::new(items)
-                .highlight_symbol("› ")
-                .highlight_style(Style::new().bold()),
-            list,
-            &mut state,
-        );
-        frame.render_widget(Line::from(palette()), hints);
+        frame.render_stateful_widget(cursor_list(items.collect(), focused), list, &mut state);
+        frame.render_widget(Line::from(self.hints()), hints);
         if let Some(tool) = self.info.and_then(|i| self.tools.get(i)) {
             let row_width = self
                 .tools
@@ -217,17 +260,32 @@ impl SelectScreen {
     }
 }
 
-fn palette() -> Vec<Span<'static>> {
-    let keys = [
-        ("j/k", "move"),
-        ("space", "toggle"),
-        ("i", "details"),
-        ("enter", "review changes"),
-        ("q", "quit"),
-    ];
-    keys.into_iter()
-        .flat_map(|(key, label)| [key.bold(), format!(" {label}   ").dim()])
-        .collect()
+impl SelectScreen {
+    fn hints(&self) -> Vec<Span<'static>> {
+        let keys: &[(&str, &str)] = if self.config.editing() {
+            &[("enter", "set"), ("esc", "cancel")]
+        } else if self.focus == Focus::Config {
+            &[
+                ("j/k", "move"),
+                ("i", "edit"),
+                ("l", "applications"),
+                ("enter", "review changes"),
+                ("q", "quit"),
+            ]
+        } else {
+            &[
+                ("j/k", "move"),
+                ("space", "toggle"),
+                ("i", "details"),
+                ("h", "config"),
+                ("enter", "review changes"),
+                ("q", "quit"),
+            ]
+        };
+        keys.iter()
+            .flat_map(|(key, label)| [key.bold(), format!(" {label}   ").dim()])
+            .collect()
+    }
 }
 
 fn version_text(tool: &Tool) -> String {
@@ -341,8 +399,11 @@ mod tests {
                 version: Some(semver::Version::new(1, 0, 0)),
             })
             .collect();
-        let exclusions: Vec<String> = exclusions.iter().map(|e| e.to_string()).collect();
-        SelectScreen::new(found, &exclusions, &ports)
+        let reference = Reference {
+            exclusions: exclusions.iter().map(|e| e.to_string()).collect(),
+            ..Reference::default()
+        };
+        SelectScreen::new(found, &ports, reference)
     }
 
     fn screen(names: &[&str], exclusions: &[&str]) -> SelectScreen {
@@ -446,13 +507,13 @@ mod tests {
     fn info_opens_on_a_tool_and_any_key_closes_it() {
         let mut s = screen(&["a"], &[]);
         press(&mut s, "i");
-        assert!(!s.modal_open());
+        assert!(!s.captures_input());
         press(&mut s, "jji");
-        assert!(s.modal_open());
+        assert!(s.captures_input());
 
         assert!(!s.handle(KeyCode::Enter));
 
-        assert!(!s.modal_open());
+        assert!(!s.captures_input());
     }
 
     #[test]
@@ -493,7 +554,7 @@ mod tests {
             version: Some(semver::Version::new(2, 1, 0)),
         }];
 
-        let s = SelectScreen::new(found, &[], &[port]);
+        let s = SelectScreen::new(found, &[port], Reference::default());
 
         assert!(s.tools[0].untested);
         assert!(s.tools[0].checked);
@@ -507,5 +568,25 @@ mod tests {
         let mut s = screen(&["a"], &[]);
         assert!(!s.handle(KeyCode::Char('j')));
         assert!(s.handle(KeyCode::Enter));
+    }
+
+    #[test]
+    fn h_and_l_switch_panes_and_keys_follow_focus() {
+        let mut s = screen(&["a"], &[]);
+        press(&mut s, "hjji");
+        assert!(s.captures_input());
+        s.handle(KeyCode::Backspace);
+        press(&mut s, "z");
+        s.handle(KeyCode::Enter);
+        assert_eq!(s.reference().keys["down"], "z");
+        press(&mut s, "ljj ");
+        assert!(!s.tools[0].checked);
+    }
+
+    #[test]
+    fn q_is_typed_while_editing() {
+        let mut s = screen(&["a"], &[]);
+        press(&mut s, "hi");
+        assert!(s.captures_input());
     }
 }

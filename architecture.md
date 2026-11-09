@@ -25,6 +25,9 @@ scan ──▶ select ──▶ plan ──▶ confirm ──▶ execute ──�
    in `exclusions`. Unsupported tools are greyed out at the bottom: they cannot be
    checked and never enter `exclusions`, so they are offered once a port covers
    them. `i` opens a modal with what the port covers.
+   A config pane left of the tools shows the theme and keys; `h`/`l` switch panes,
+   `i` edits a value. Edits are saved on accept, writing only the values that
+   changed, and plan with the edited reference's hash.
 3. **plan:** checkboxes are desired state, diffed against state:
 
    | Checked | Applied | Op                         |
