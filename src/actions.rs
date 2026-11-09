@@ -15,6 +15,14 @@ pub fn is_action(name: &str) -> bool {
     DEFAULTS.iter().any(|(action, _)| *action == name)
 }
 
+/// Shape check only; whether a tool can spell the key is up to each port's notation.
+pub fn is_key(key: &str) -> bool {
+    if key.chars().any(char::is_whitespace) {
+        return false;
+    }
+    key.chars().count() == 1 || (key.len() > 2 && key.starts_with('<') && key.ends_with('>'))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Notation {

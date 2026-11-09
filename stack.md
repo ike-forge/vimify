@@ -71,12 +71,14 @@ $ vimify
 
  Scanning  ███████████░░░░░░░  6/11  ~/.cargo/bin
 
- [x] apply to all
- [ ] apply to none
- ─────────────────
- [x] lazygit
- [ ] lazysql      (excluded)
- [x] yazi
+ Config                 Applications
+
+ theme   catppuccin-frappe   [x] apply to all
+ left    h                   [ ] apply to none
+ down    n *                 ─────────────────
+ up      k                   [x] lazygit
+                             [ ] lazysql      (excluded)
+                             [x] yazi
 ```
 
 - Progress is per scanned directory, not per file.

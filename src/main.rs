@@ -3,16 +3,19 @@ use vimify::{apply, palette, paths, port, reference, scan, state, ui};
 
 fn main() -> Result<()> {
     let reference = reference::load()?;
-    let palette = palette::load(&reference.theme)?;
+    palette::load(&reference.theme)?;
     let mut state = state::load()?;
     let ports = port::embedded()?;
     let extra = reference.scan.extra_paths.iter().map(String::as_str);
     let dirs = scan::resolve_dirs(scan::DEFAULT_DIRS.iter().copied().chain(extra));
-    let hash = reference.hash()?;
-    let Some(outcome) = ui::run(dirs, ports, &reference.exclusions, &state, &hash)? else {
+    let Some(outcome) = ui::run(dirs, ports, &reference, &state)? else {
         return Ok(());
     };
     reference::save_exclusions(&outcome.exclusions)?;
+    reference::save_settings(&reference, &outcome.reference)?;
+    let reference = outcome.reference;
+    let palette = palette::load(&reference.theme)?;
+    let hash = reference.hash()?;
     let cx = apply::Context {
         ports: &outcome.ports,
         reference: &reference,

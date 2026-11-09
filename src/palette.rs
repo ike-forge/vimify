@@ -36,6 +36,13 @@ pub fn placeholders(text: &str) -> impl Iterator<Item = &str> {
         .map(|(role, _)| role)
 }
 
+pub fn names() -> Vec<&'static str> {
+    EMBEDDED
+        .files()
+        .filter_map(|f| f.path().to_str()?.strip_suffix(".toml"))
+        .collect()
+}
+
 pub fn load(theme: &str) -> Result<Palette> {
     let text = EMBEDDED
         .get_file(format!("{theme}.toml"))
