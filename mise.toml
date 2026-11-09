@@ -55,11 +55,20 @@ run = "docker run --rm vimify-sandbox sandbox-e2e"
 # Opt-in: pulls a ~1GB node image and keeps a cluster running on host Docker.
 [tasks."sandbox:cluster"]
 run = """
-kind get clusters 2>/dev/null | grep -qx vimify && exit 0
-# Keeps the cluster out of the host ~/.kube/config.
-cfg=$(mktemp)
-kind create cluster --name vimify --kubeconfig "$cfg"
-rm -f "$cfg"
+if ! kind get clusters 2>/dev/null | grep -qx vimify; then
+  # Keeps the cluster out of the host ~/.kube/config.
+  cfg=$(mktemp)
+  kind create cluster --name vimify --kubeconfig "$cfg"
+  rm -f "$cfg"
+fi
+# Pulled by host Docker: the node's containerd lacks the proxy CAs. Not `kind
+# load`: it imports all platforms, but the containerd image store holds only one.
+for img in $(sed -n 's/^ *image: *//p' docker/cluster.yaml | sort -u); do
+  docker pull -q "$img" >/dev/null
+  docker save "$img" | docker exec -i vimify-control-plane ctr -n k8s.io images import - >/dev/null
+done
+# The node's own kubectl, so the host needs none.
+docker exec -i vimify-control-plane kubectl --kubeconfig /etc/kubernetes/admin.conf apply -f - < docker/cluster.yaml
 """
 
 [tasks."sandbox:cluster:delete"]
