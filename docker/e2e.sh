@@ -75,7 +75,7 @@ seed() {
 # Reaches the confirm screen. Arguments are keys for the select screen.
 confirm() {
   close
-  tmux -u new-session -d -s app -x 150 -y 40 'vimify 2>&1; echo EXIT=$?; sleep 60'
+  tmux -u new-session -d -s app -x 150 -y 40 'vimify apply 2>&1; echo EXIT=$?; sleep 60'
   wait_for 'select all' || return 1
   [ "$#" = 0 ] || tmux -u send-keys -t app "$@"
   # Enter only confirms on the `Apply changes` row, the top one.
@@ -218,6 +218,56 @@ test_revert_of_an_untouched_file_is_byte_identical() {
   on_screen 'Nothing to apply'
 }
 
+start() {
+  close
+  tmux -u new-session -d -s app -x 150 -y 40 "vimify $1 2>&1; echo EXIT=\$?; sleep 60"
+}
+
+test_rollback_restores_the_original() {
+  seed
+  apply
+  start rollback
+  wait_for 'Revert changes' || return
+  on_screen '\[ \] lazygit'
+  # select all, then the button.
+  tmux -u send-keys -t app j Space g Enter
+  wait_for ' confirm' || return
+  on_screen 'revert .*lazygit'
+  accept
+  in_output 'EXIT=0'
+  is_original "$CFG"
+  not_in_file "$STATE" 'lazygit'
+  in_file "$REFERENCE" 'lazygit'
+}
+
+test_rollback_with_nothing_applied_says_so() {
+  reset
+  start rollback
+  wait_for 'EXIT=' && close_after_read
+  in_output 'Nothing to roll back'
+}
+
+test_config_saves_edits_for_apply() {
+  seed
+  apply
+  start config
+  wait_for 'Save changes' || return
+  # Row 3 is down; clear j, type m, then save from the top row.
+  tmux -u send-keys -t app j j j Enter BSpace m Enter g Enter
+  wait_for 'EXIT=' && close_after_read
+  in_output 'vimify apply'
+  in_file "$REFERENCE" 'down = "m"'
+  confirm
+  on_screen 'update .*lazygit'
+}
+
+test_bare_vimify_prints_help() {
+  close
+  OUTPUT=$(vimify 2>&1)
+  in_output 'rollback'
+  in_output 'config'
+}
+
 test_unrelated_edits_are_not_manual_and_survive_revert() {
   seed
   apply
@@ -325,7 +375,7 @@ test_lazygit_honours_what_vimify_wrote() {
 
 test_info_modal_shows_what_a_port_covers() {
   reset
-  tmux -u new-session -d -s app -x 150 -y 40 'vimify 2>&1; echo EXIT=$?; sleep 60'
+  tmux -u new-session -d -s app -x 150 -y 40 'vimify apply 2>&1; echo EXIT=$?; sleep 60'
   wait_for 'select all' || return
   # The tools sort as bat, btop, gitui, k9s, lazydocker.
   tmux -u send-keys -t app j j j j j j j i
@@ -344,7 +394,7 @@ test_info_modal_shows_what_a_port_covers() {
 
 test_versions_are_detected_and_shown() {
   reset
-  tmux -u new-session -d -s app -x 150 -y 40 'vimify 2>&1; sleep 60'
+  tmux -u new-session -d -s app -x 150 -y 40 'vimify apply 2>&1; sleep 60'
   wait_for 'select all' || return
   on_screen 'lazygit .*0\.66\.1 .*supported'
   on_screen 'lazysql .*0\.7\.0 .*supported'

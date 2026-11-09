@@ -67,19 +67,24 @@ both running; `sandbox:cluster:delete` and `sandbox:s3:delete` remove them. Demo
 ## Interface
 
 ```
-$ vimify
+$ vimify apply
 
  Scanning  ███████████░░░░░░░  6/11  ~/.cargo/bin
 
- Config                 Applications
-                             i details
- theme   catppuccin-frappe    Apply changes
- left    h                   [x] select all
- down    n *                 [ ] select none
- up      k                   ─────────────────
-                             [x] lazygit
-                             [ ] lazysql      (excluded)
-                             [x] yazi
+ › Apply changes
+   [x] select all
+   [ ] select none
+   ─────────────────
+   [x] lazygit
+   [ ] lazysql      (excluded)
+   [x] yazi
+
+$ vimify config
+
+ › Save changes
+   theme   catppuccin-frappe
+   left    h
+   down    n *
 ```
 
 - Progress is per scanned directory, not per file.
@@ -100,5 +105,4 @@ carries them to new machines.
 
 ## Open questions
 
-- Whether to add non-interactive subcommands (`vimify apply --all`) for
-  scripting. Implies `clap`.
+- Whether to add non-interactive flags (`vimify apply --all`) for scripting.

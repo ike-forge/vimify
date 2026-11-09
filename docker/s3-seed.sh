@@ -19,7 +19,7 @@ cat > docs/README.md <<'MD'
 
 Sample objects for **stu**. Open one to preview it, `?` lists the bindings.
 MD
-printf '# Getting started\n\n1. Run `vimify`.\n2. Open `stu`.\n' > docs/guides/getting-started.md
+printf '# Getting started\n\n1. Run `vimify apply`.\n2. Open `stu`.\n' > docs/guides/getting-started.md
 printf '# Keybindings\n\n| Key | Action |\n|-----|--------|\n| j   | down   |\n| k   | up     |\n' > docs/guides/keybindings.md
 printf 'Plain text, no extension handling.\n' > docs/notes.txt
 

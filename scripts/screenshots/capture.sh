@@ -28,7 +28,7 @@ shoot() {
 cargo build --release --quiet --manifest-path "$root/Cargo.toml"
 vimify=$root/target/release/vimify
 
-t new -d -s select -x 96 -y 20 "${env_[@]}" "$vimify"
+t new -d -s select -x 96 -y 20 "${env_[@]}" "$vimify" apply
 sleep 4
 shoot select "vimify"
 t send-keys -t select Enter

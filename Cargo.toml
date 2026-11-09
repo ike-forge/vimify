@@ -9,6 +9,7 @@ publish = false
 
 [dependencies]
 anyhow = "1"
+clap = { version = "4.6.7", features = ["derive"] }
 include_dir = "0.7"
 ratatui = "0.30"
 semver = "1.0.28"

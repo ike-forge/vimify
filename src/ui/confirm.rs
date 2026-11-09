@@ -70,7 +70,7 @@ impl ConfirmScreen {
             Line::from(vec!["Excluded on later runs: ".dim(), excluded.into()]),
             exclusions,
         );
-        frame.render_widget(Line::from("y apply  n back  q quit").dim(), footer);
+        frame.render_widget(Line::from("y confirm  n back  q quit").dim(), footer);
     }
 
     fn list(&self) -> List<'_> {
