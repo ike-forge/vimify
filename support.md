@@ -14,11 +14,11 @@ blank: the tool has no such action
 | lazysql    | ≥ 0.7    |  ❌  |  ✅  |  ✅  |  ❌   |  ✅  |   ✅   |  ❌  |  ✅   |
 | less       | ≥ 582    |  ✅  |  ✅  |  ✅  |  ✅   |      |        |  ✅  |  ❌   |
 | stu        | ≥ 0.7    |  🟡  |  ✅  |  ✅  |  🟡   |  ✅  |        |  ❌  |  ➖   |
+| lazydocker | ≥ 0.25   |  ➖  |  ➖  |  ➖  |  ➖   |      |   ➖   |  ➖  |  ✅   |
 | btop       | ≥ 1.3    |  ➖  |  ➖  |  ➖  |  ➖   |      |        |  ➖  |  ✅   |
 | bat        | ≥ 0.25   |  ➖  |  ➖  |  ➖  |  ➖   |      |        |  ➖  |  🟡   |
 | lfk        | ≥ 0.19   |  ➖  |  ➖  |  ➖  |  ➖   |  ❌  |   ❌   |  ❌  |  ✅   |
 | k9s        | ≥ 0.40   |  ❌  |  ➖  |  ➖  |  ❌   |  ❌  |   ❌   |  ❌  |  ✅   |
-| lazydocker | ≥ 0.25   |  ❌  |  ❌  |  ❌  |  ❌   |  ❌  |   ❌   |  ➖  |  ✅   |
 | gitui      | —        |  ❌  |  ❌  |  ❌  |  ❌   |  ❌  |   ❌   |  ❌  |  ❌   |
 
 Outside its range a tool still gets the nearest port, shown as `untested` on another
@@ -41,7 +41,8 @@ major version ([architecture.md](architecture.md#sources-and-versioning)).
 - **lfk**: theme only; navigation is fixed, and resource deletion stays on D.
 - **k9s**: theme only, through a `vimify` skin. j and k are built in. A skin set per
   cluster or context wins over it.
-- **lazydocker**: theme only; it has no configurable keybindings.
+- **lazydocker**: theme only; it has no configurable keybindings. Its own h, j, k, l, d
+  and q are already vim's.
 - **bat**: no keybindings; output longer than a screen pages through less, so its keys
   are less's: j, k and q, and sideways scrolling. The less port rebinds them. Theme is
   `ansi`, so syntax colours follow the terminal palette: bat ships no Catppuccin

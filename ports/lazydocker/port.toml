@@ -3,7 +3,7 @@ version = "0.1.0"
 binaries = ["lazydocker"]
 versions = ">=0.25"
 
-notes = "Theme only: lazydocker has no configurable keybindings."
+notes = "Theme only: lazydocker has no configurable keybindings. Its own h, j, k, l, d and q are already vim's."
 
 [[target]]
 format = "yaml"
