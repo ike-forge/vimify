@@ -4,7 +4,7 @@ version = "0.1.0"
 binaries = ["bat", "batcat"]
 versions = ">=0.25"
 
-notes = "Theme only: bat has no keybindings, and pages through less. Syntax colours follow the terminal's palette: bat ships no Catppuccin theme, and a custom one needs `bat cache --build`."
+notes = "Theme only: bat has no keybindings. Output longer than a screen pages through less, so its keys are less's. The less port rebinds them. Syntax colours follow the terminal's palette: bat ships no Catppuccin theme, and a custom one needs `bat cache --build`."
 
 [[target]]
 format = "lines"

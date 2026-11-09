@@ -86,7 +86,11 @@ pub fn scan(dirs: &[PathBuf], ports: &[Port], tx: &Sender<Event>) -> Result<(), 
                     path: dir.join(bin),
                     version: None,
                 };
-                detected.push((detection.clone(), port.version_args.clone()));
+                detected.push((
+                    detection.clone(),
+                    port.version_args.clone(),
+                    port.integer_version,
+                ));
                 tx.send(Event::Found(detection))?;
             }
         }
@@ -99,7 +103,9 @@ pub fn scan(dirs: &[PathBuf], ports: &[Port], tx: &Sender<Event>) -> Result<(), 
     let versions: Vec<_> = thread::scope(|s| {
         let threads: Vec<_> = detected
             .iter()
-            .map(|(d, args)| s.spawn(move || (d.port.clone(), tool_version(&d.path, args))))
+            .map(|(d, args, integer)| {
+                s.spawn(move || (d.port.clone(), tool_version(&d.path, args, *integer)))
+            })
             .collect();
         threads.into_iter().filter_map(|t| t.join().ok()).collect()
     });
@@ -113,7 +119,7 @@ pub fn scan(dirs: &[PathBuf], ports: &[Port], tx: &Sender<Event>) -> Result<(), 
 
 /// Runs the tool, which is why only ports' own binaries get here. `None` if it does not
 /// answer: a tool that opens its UI instead must not hold up the scan.
-fn tool_version(path: &Path, args: &[String]) -> Option<Version> {
+fn tool_version(path: &Path, args: &[String], integer: bool) -> Option<Version> {
     let mut child = Command::new(path)
         .args(args)
         .stdin(Stdio::null())
@@ -132,12 +138,12 @@ fn tool_version(path: &Path, args: &[String]) -> Option<Version> {
     }
     let output = child.wait_with_output().ok()?;
     let text = [output.stdout, output.stderr].concat();
-    parse_version(&String::from_utf8_lossy(&text))
+    parse_version(&String::from_utf8_lossy(&text), integer)
 }
 
-/// The first dotted number, which holds for every tool's `--version` so far. Tools do
-/// not all use semver, hence no strict parse: `2024.01` has a leading zero.
-fn parse_version(text: &str) -> Option<Version> {
+/// The first dotted number, or with `integer` the first number. Tools do not all use
+/// semver, hence no strict parse: `2024.01` has a leading zero.
+fn parse_version(text: &str, integer: bool) -> Option<Version> {
     let mut rest = text;
     while let Some(start) = rest.find(|c: char| c.is_ascii_digit()) {
         let number = &rest[start..];
@@ -147,9 +153,13 @@ fn parse_version(text: &str) -> Option<Version> {
         let token = number[..end].trim_end_matches('.');
         let parts: Vec<&str> = token.split('.').collect();
         let glued = rest[..start].ends_with(|c: char| c.is_ascii_alphabetic() && c != 'v');
-        if parts.len() >= 2 && !glued {
+        if (parts.len() >= 2 || integer) && !glued {
             let part = |i: usize| parts.get(i).and_then(|p| p.parse::<u64>().ok());
-            return Some(Version::new(part(0)?, part(1)?, part(2).unwrap_or(0)));
+            return Some(Version::new(
+                part(0)?,
+                part(1).unwrap_or(0),
+                part(2).unwrap_or(0),
+            ));
         }
         rest = &number[end..];
         rest = rest.trim_start_matches(|c: char| c.is_ascii_alphanumeric());
@@ -164,13 +174,17 @@ mod tests {
     use tempfile::TempDir;
 
     fn parsed(text: &str) -> Option<String> {
-        parse_version(text).map(|v| v.to_string())
+        parse_version(text, false).map(|v| v.to_string())
     }
 
     /// `sh -c`, not a script file: a file just written can fail with "Text file busy"
     /// while another test forks.
     fn shell(body: &str) -> Option<Version> {
-        tool_version(Path::new("/bin/sh"), &["-c".to_owned(), body.to_owned()])
+        tool_version(
+            Path::new("/bin/sh"),
+            &["-c".to_owned(), body.to_owned()],
+            false,
+        )
     }
 
     #[test]
@@ -204,6 +218,15 @@ mod tests {
     }
 
     #[test]
+    fn an_integer_version_reads_as_the_major() {
+        let less = parse_version(
+            "less 710 (PCRE2 regular expressions)\nCopyright (C) 1984-2024",
+            true,
+        );
+        assert_eq!(less, Some(Version::new(710, 0, 0)));
+    }
+
+    #[test]
     fn text_without_a_version_is_none() {
         assert_eq!(parsed("Error: unknown flag: --version"), None);
         assert_eq!(parsed("build 12345 x86.64"), None);
@@ -231,7 +254,7 @@ mod tests {
 
     #[test]
     fn a_tool_that_cannot_run_has_no_version() {
-        assert_eq!(tool_version(Path::new("/nonexistent"), &[]), None);
+        assert_eq!(tool_version(Path::new("/nonexistent"), &[], false), None);
     }
 
     fn port(name: &str, binaries: &[&str]) -> Port {
@@ -242,6 +265,7 @@ mod tests {
             targets: Vec::new(),
             versions: VersionReq::STAR,
             version_args: Vec::new(),
+            integer_version: false,
             notes: None,
         }
     }

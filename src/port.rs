@@ -22,6 +22,8 @@ pub struct Port {
     pub versions: VersionReq,
     /// Arguments that print the tool's version.
     pub version_args: Vec<String>,
+    /// The tool numbers releases with one integer (`less 710`), read as the major.
+    pub integer_version: bool,
     /// One per file. Splitting a tool's config across files changes nothing else.
     pub targets: Vec<Target>,
     /// Why the port covers what it does; shown in the info modal.
@@ -117,6 +119,9 @@ pub struct Target {
     pub theme: BTreeMap<String, ThemeValue>,
     /// Text of a `block` target, with `{role}` placeholders.
     pub template: Option<String>,
+    /// Line a `block` target writes per key after its template, with `{key}` and
+    /// `{setting}` placeholders, for configs that bind as `key action` lines.
+    pub key_line: Option<String>,
 }
 
 impl Target {
@@ -151,6 +156,8 @@ struct PortFile {
     versions: Option<String>,
     #[serde(default = "default_version_args")]
     version_args: Vec<String>,
+    #[serde(default)]
+    integer_version: bool,
     #[serde(default)]
     target: Vec<Target>,
     notes: Option<String>,
@@ -237,6 +244,7 @@ pub fn parse(name: &str, text: &str) -> Result<Port> {
             .parse()
             .with_context(|| format!("port {name}: versions {versions}"))?,
         version_args: file.version_args,
+        integer_version: file.integer_version,
         targets: file.target,
         notes: file.notes,
     };
@@ -258,7 +266,13 @@ const FORBIDDEN_VARS: &[&str] = &[
 
 /// Named one by one: a wildcard over `~/.*` would reach `~/.ssh` and `~/.aws`.
 /// `.stu` is stu's only config location.
-const HOME_CONFIG_DIRS: &[&str] = &[".config/", "Library/Application Support/", ".stu/"];
+// less reads `~/.lesskey` when no XDG one exists, so creating the XDG one would hide it.
+const HOME_CONFIG_DIRS: &[&str] = &[
+    ".config/",
+    "Library/Application Support/",
+    ".stu/",
+    ".lesskey",
+];
 
 /// A port must not reach arbitrary files. This bounds the damage; it does not replace
 /// reviewing what a port writes.
@@ -310,6 +324,10 @@ fn validate_target(target: &Target) -> Result<()> {
     }
     if target.template.is_some() != (target.strategy == Strategy::Block) {
         bail!("a template belongs to a block target, and a block target needs one");
+    }
+    let block_keys = target.strategy == Strategy::Block && !target.keys.is_empty();
+    if target.key_line.is_some() != block_keys {
+        bail!("a key_line belongs to a block target with keys, and such a target needs one");
     }
     let values = target.theme.values().flat_map(|value| match value {
         ThemeValue::One(s) => std::slice::from_ref(s),
@@ -514,6 +532,22 @@ mod tests {
     #[test]
     fn a_block_target_needs_a_template() {
         let text = YAML.replace("\"edit\"", "\"block\"");
+        assert!(parse("x", &text).is_err());
+    }
+
+    #[test]
+    fn a_block_target_with_keys_needs_a_key_line() {
+        let text = YAML
+            .replace("\"edit\"", "\"block\"")
+            .replace("\"yaml\"", "\"lines\"");
+        let text = format!("{text}template = \"a\"\n[target.keys]\nb = \"up\"\n");
+        let err = parse("x", &text).unwrap_err();
+        assert!(format!("{err:#}").contains("key_line"));
+    }
+
+    #[test]
+    fn a_key_line_needs_a_block_target() {
+        let text = format!("{YAML}key_line = \"{{key}}\"\n[target.keys]\na = \"up\"\n");
         assert!(parse("x", &text).is_err());
     }
 

@@ -59,7 +59,7 @@ close() { tmux -u kill-server 2>/dev/null; }
 reset() {
   close
   rm -rf ~/.config/lazygit ~/.config/lazydocker ~/.config/lfk ~/.config/lazysql \
-    ~/.config/bat ~/.config/btop ~/.config/k9s ~/.config/yazi ~/.stu \
+    ~/.config/bat ~/.config/btop ~/.config/k9s ~/.config/yazi ~/.stu ~/.config/lesskey \
     ~/.config/vimify ~/.local/state/vimify ~/.cache/vimify
   mkdir -p ~/.config/lazysql
   cp /tmp/lazysql.seed "$LAZYSQL"
@@ -350,6 +350,7 @@ test_versions_are_detected_and_shown() {
   on_screen 'btop .*1\.3\.2 .*supported'
   on_screen 'gitui .*0\.28\.1 .*supported'
   on_screen 'stu .*0\.7\.6 .*supported'
+  on_screen 'less .*supported'
   close
 }
 
@@ -512,6 +513,34 @@ test_bat_uses_the_terminal_palette() {
   esac
   revert
   is_original ~/.config/bat/config
+}
+
+test_less_honours_what_vimify_wrote() {
+  reset
+  mkdir -p ~/.config/vimify
+  printf '[keys]\ndown = "m"\n' >"$REFERENCE"
+  apply
+  in_file ~/.config/lesskey 'm forw-line'
+  for i in $(seq -w 1 99); do printf 'line%s %0300d\n' "$i" 0; done >/tmp/long.txt
+  # Chopped: on a wrapped long line, a line move stops mid-line.
+  tmux -u new-session -d -s app -x 80 -y 10 'less -S /tmp/long.txt; echo EXIT=$?; sleep 60'
+  wait_for '^line01' || return
+  tmux -u send-keys -t app m
+  wait_for '^line02' || return
+  # less's own j survives.
+  tmux -u send-keys -t app j
+  wait_for '^line03' || return
+  tmux -u send-keys -t app l
+  wait_for '^0000' || return
+  # h scrolls back instead of opening help.
+  tmux -u send-keys -t app h
+  wait_for '^line03' || return
+  off_screen 'SUMMARY OF LESS COMMANDS'
+  tmux -u send-keys -t app q
+  wait_for 'EXIT=0'
+  close
+  revert
+  absent ~/.config/lesskey
 }
 
 # stu refuses to start on a key it cannot parse, and its help lists every binding.

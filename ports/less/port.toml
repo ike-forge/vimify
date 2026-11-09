@@ -1,0 +1,29 @@
+schema = 1
+version = "0.1.0"
+binaries = ["less"]
+# less 582 reads a lesskey source file; older ones need it compiled to ~/.less.
+versions = ">=582"
+integer_version = true
+
+notes = "Keys only, and for every program paging through less: bat, man, git. left and right scroll sideways; h no longer opens help, H still does. yank and delete do not apply. BusyBox less reads no lesskey file."
+
+# Bindings in this file take precedence over less's built-in ones.
+[[target]]
+format = "lines"
+strategy = "block"
+key_notation = "lesskey"
+paths = [
+  "$LESSKEYIN",
+  "$XDG_CONFIG_HOME/lesskey",
+  "~/.config/lesskey",
+  "~/.lesskey",
+]
+template = "#command"
+key_line = "{key} {setting}"
+
+[target.keys]
+forw-line = "down"
+back-line = "up"
+left-scroll = "left"
+right-scroll = "right"
+quit = "quit"

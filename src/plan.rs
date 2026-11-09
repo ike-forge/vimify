@@ -204,6 +204,7 @@ mod tests {
             binaries: vec![name.into()],
             versions: semver::VersionReq::STAR,
             version_args: vec![],
+            integer_version: false,
             targets: paths.map(target).into_iter().collect(),
             notes: None,
         }
@@ -218,6 +219,7 @@ mod tests {
             keys: BTreeMap::from([("a.b".into(), "down".into())]),
             theme: BTreeMap::new(),
             template: None,
+            key_line: None,
         }
     }
 

@@ -1,0 +1,10 @@
+#env
+LESS = -R
+# >>> vimify >>>
+#command
+k back-line
+j forw-line
+h left-scroll
+q quit
+l right-scroll
+# <<< vimify <<<
