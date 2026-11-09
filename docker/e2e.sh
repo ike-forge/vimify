@@ -13,6 +13,8 @@ ACCENT='38;2;140;170;238'
 SELECTION='48;2;65;69;89'
 BORDER='38;2;81;87;109'
 ACCENT_BG='48;2;140;170;238'
+# #303446.
+BASE_BG='48;2;48;52;70'
 
 LAZYSQL=~/.config/lazysql/config.toml
 cp "$LAZYSQL" /tmp/lazysql.seed
@@ -534,6 +536,7 @@ test_btop_shows_the_palette() {
   sleep 2
   screen -e | grep -aq "$ACCENT" || fail 'accent colour not on screen'
   screen -e | grep -aq "$BORDER" || fail 'border colour not on screen'
+  screen -e | grep -aq "$BASE_BG" || fail 'base background not on screen'
   # Vim mode: the process list follows j.
   tmux -u send-keys -t app j
   sleep 1
