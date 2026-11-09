@@ -112,6 +112,17 @@ paths = ["$XDG_CONFIG_HOME/bat/config"]
 template = '--theme="ansi"'
 ```
 
+A block target with keys writes one `key_line` per key after the template, for configs
+that bind as `key action` lines:
+
+```toml
+template = "#command"
+key_line = "{key} {setting}"
+
+[target.keys]
+forw-line = "down"
+```
+
 ### Sources and versioning
 
 - `ports/` is embedded at build time (`include_dir`), so vimify works offline.
@@ -120,7 +131,8 @@ template = '--theme="ansi"'
 
 A port covers a range of tool versions: `versions = ">=0.40, <0.60"`, default all.
 Add a new port only when a tool's config changes, as `ports/<tool>/<dir>/port.toml`.
-The scan runs `version_args` (default `--version`) and takes the first dotted number.
+The scan runs `version_args` (default `--version`) and takes the first dotted number,
+or with `integer_version = true` the first number (`less 710` is 710.0.0).
 
 | Tool version                        | Port    | Shown       |
 | ----------------------------------- | ------- | ----------- |

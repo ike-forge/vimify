@@ -32,6 +32,8 @@ pub enum Notation {
     Gitui,
     /// stu: `ctrl-u`, `shift-g`, inside a list.
     Stu,
+    /// less's lesskey file: `^U`, `\e` for alt, `\kd` for arrows.
+    Lesskey,
     /// The tool spells keys as the reference does.
     Vim,
 }
@@ -44,6 +46,7 @@ impl Notation {
             Notation::Tcell => tcell(key),
             Notation::Gitui => gitui(key),
             Notation::Stu => stu(key),
+            Notation::Lesskey => lesskey(key),
             Notation::Vim => Some(key.to_owned()),
         }
     }
@@ -171,6 +174,48 @@ fn tcell(key: &str) -> Option<String> {
     Some(name.to_owned())
 }
 
+fn lesskey(key: &str) -> Option<String> {
+    let literal = |ch: char| match ch {
+        // A line starting with # is a comment; ^ and \ are lesskey's own escapes.
+        '#' | '^' | '\\' => Some(format!("\\{ch}")),
+        ch if ch.is_ascii_graphic() => Some(ch.to_string()),
+        _ => None,
+    };
+    if key.chars().count() == 1 {
+        return literal(key.chars().next()?);
+    }
+    let inner = key.strip_prefix('<')?.strip_suffix('>')?.to_lowercase();
+    if let Some((m @ ("c" | "a"), ch)) = inner.split_once('-') {
+        let mut chars = ch.chars();
+        let (Some(ch), None) = (chars.next(), chars.next()) else {
+            return None;
+        };
+        return match m {
+            "c" if ch.is_ascii_lowercase() => Some(format!("^{}", ch.to_ascii_uppercase())),
+            "a" => Some(format!("\\e{}", literal(ch)?)),
+            _ => None,
+        };
+    }
+    let name = match inner.as_str() {
+        "cr" | "enter" | "return" => "\\r",
+        "bs" | "backspace" => "\\b",
+        "del" | "delete" => "\\kx",
+        "esc" => "\\e",
+        "tab" => "\\t",
+        "space" => "\\ ",
+        "up" => "\\ku",
+        "down" => "\\kd",
+        "left" => "\\kl",
+        "right" => "\\kr",
+        "home" => "\\kh",
+        "end" => "\\ke",
+        "pageup" | "pgup" => "\\kU",
+        "pagedown" | "pgdown" | "pgdn" => "\\kD",
+        _ => return None,
+    };
+    Some(name.to_owned())
+}
+
 /// stu lowercases what it reads, so `G` must be `shift-g`, and it reads one byte as a
 /// char, so non-ASCII keys cannot be bound.
 fn stu(key: &str) -> Option<String> {
@@ -210,6 +255,27 @@ mod tests {
 
     fn stu(key: &str) -> Option<String> {
         Notation::Stu.convert(key)
+    }
+
+    #[test]
+    fn lesskey_escapes_its_own_syntax() {
+        let lesskey = |k| Notation::Lesskey.convert(k);
+        assert_eq!(lesskey("j").as_deref(), Some("j"));
+        assert_eq!(lesskey("#").as_deref(), Some("\\#"));
+        assert_eq!(lesskey("^").as_deref(), Some("\\^"));
+        assert_eq!(lesskey("\\").as_deref(), Some("\\\\"));
+    }
+
+    #[test]
+    fn lesskey_spells_modifiers_and_names() {
+        let lesskey = |k| Notation::Lesskey.convert(k);
+        assert_eq!(lesskey("<C-u>").as_deref(), Some("^U"));
+        assert_eq!(lesskey("<A-j>").as_deref(), Some("\\ej"));
+        assert_eq!(lesskey("<Space>").as_deref(), Some("\\ "));
+        assert_eq!(lesskey("<Down>").as_deref(), Some("\\kd"));
+        assert_eq!(lesskey("<PageUp>").as_deref(), Some("\\kU"));
+        assert_eq!(lesskey("<F1>"), None);
+        assert_eq!(lesskey("é"), None);
     }
 
     #[test]

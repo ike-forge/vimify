@@ -20,18 +20,24 @@ pub fn render(
 ) -> Result<Rendered> {
     let mut values = Vec::new();
     let mut warnings = Vec::new();
+    let mut key_lines = Vec::new();
     for (setting, action) in &target.keys {
         let key = reference
             .keys
             .get(action)
             .with_context(|| format!("no key for action {action}"))?;
         let notation = target.key_notation;
-        match notation.and_then(|n| n.convert(key)) {
-            Some(converted) if notation.is_some_and(Notation::is_list) => {
+        let converted = notation.and_then(|n| n.convert(key));
+        match (converted, &target.key_line) {
+            (Some(converted), Some(line)) => key_lines.push(
+                line.replace("{key}", &converted)
+                    .replace("{setting}", setting),
+            ),
+            (Some(converted), None) if notation.is_some_and(Notation::is_list) => {
                 values.push((setting.clone(), Value::List(vec![converted])));
             }
-            Some(converted) => values.push((setting.clone(), Value::Str(converted))),
-            None => warnings.push(format!("{tool} cannot express key {key}")),
+            (Some(converted), None) => values.push((setting.clone(), Value::Str(converted))),
+            (None, _) => warnings.push(format!("{tool} cannot express key {key}")),
         }
     }
     for (setting, value) in &target.theme {
@@ -47,7 +53,11 @@ pub fn render(
         values.push((setting.clone(), value));
     }
     if let Some(template) = &target.template {
-        values.push((edit::BLOCK.to_owned(), Value::Str(fill(template, palette)?)));
+        let text = std::iter::once(fill(template, palette)?)
+            .chain(key_lines)
+            .collect::<Vec<_>>()
+            .join("\n");
+        values.push((edit::BLOCK.to_owned(), Value::Str(text)));
     }
     Ok(Rendered { values, warnings })
 }
@@ -154,6 +164,27 @@ mod tests {
         assert_eq!(
             out.values,
             [(edit::BLOCK.into(), Value::Str("bg #303446".into()))]
+        );
+    }
+
+    #[test]
+    fn a_key_line_follows_the_template_per_key() {
+        let text = TARGET
+            .replace("\"edit\"", "\"block\"")
+            .replace("\"yaml\"", "\"lines\"")
+            .replace("\"angle\"", "\"lesskey\"");
+        let text = format!(
+            "{text}template = \"#command\"\nkey_line = \"{{key}} {{setting}}\"\n[target.keys]\nforw-line = \"down\"\nquit = \"quit\"\n"
+        );
+
+        let out = render_port(&text, &Reference::default());
+
+        assert_eq!(
+            out.values,
+            [(
+                edit::BLOCK.into(),
+                Value::Str("#command\nj forw-line\nq quit".into())
+            )]
         );
     }
 }
