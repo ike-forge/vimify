@@ -1,0 +1,93 @@
+# Demo workloads for k9s and lfk, in `default` because both open there.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-config
+data:
+  greeting: hello
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: web-token
+stringData:
+  token: not-a-real-token
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: web}
+  template:
+    metadata:
+      labels: {app: web}
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.29-alpine
+          ports: [{containerPort: 80}]
+          envFrom: [{configMapRef: {name: web-config}}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+spec:
+  selector: {app: web}
+  ports: [{port: 80}]
+---
+# Steady log output for the log view.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: worker}
+  template:
+    metadata:
+      labels: {app: worker}
+    spec:
+      containers:
+        - name: worker
+          image: busybox:1.37
+          command: [sh, -c, 'i=0; while true; do i=$((i+1)); echo "job $i done"; sleep 2; done']
+---
+# Fails on purpose so error colours show.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crasher
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: crasher}
+  template:
+    metadata:
+      labels: {app: crasher}
+    spec:
+      containers:
+        - name: crasher
+          image: busybox:1.37
+          command: [sh, -c, 'echo "starting"; sleep 5; echo "fatal: boom" >&2; exit 1']
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: report
+spec:
+  schedule: "*/1 * * * *"
+  successfulJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: report
+              image: busybox:1.37
+              command: [sh, -c, 'echo "report at $(date)"']

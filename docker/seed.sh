@@ -34,6 +34,56 @@ Provider = 'sqlite3'
 URL = '/home/dev/demo.db'
 TOML
 
+# bat: `bat README.md` shows the theme on Markdown and embedded code.
+cat > README.md <<'MD'
+# Sandbox
+
+A demo file for **bat**. Run `bat README.md`, then compare with `bat --theme=Monokai\ Extended README.md`.
+
+## Lists and links
+
+- *Emphasis*, **strong**, ~~struck~~ and `inline code`
+- [vimify](https://github.com/ike-forge/vimify)
+  1. Nested item
+  2. Another one
+
+> A quote, with a [link](https://example.com).
+
+## Code
+
+```rust
+use std::collections::HashMap;
+
+/// Counts words, case-insensitively.
+fn count(text: &str) -> HashMap<String, usize> {
+    let mut words = HashMap::new();
+    for w in text.split_whitespace() {
+        *words.entry(w.to_lowercase()).or_insert(0) += 1;
+    }
+    words
+}
+```
+
+```sh
+for f in ~/.config/*/config*; do
+  [ -f "$f" ] && echo "found: $f" || echo "none" >&2
+done
+```
+
+```toml
+[keys]
+up = "k"
+down = "j"
+enabled = true
+retries = 3
+```
+
+| Tool | Format |
+|------|--------|
+| bat  | lines  |
+| k9s  | yaml   |
+MD
+
 # Home as a dotfiles repo: `lazygit` in ~ shows what vimify changed.
 printf '/*\n!/.config/\n!/.gitignore\n' > .gitignore
 git init -q
