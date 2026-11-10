@@ -103,6 +103,14 @@ $ vimify config
 Exclusions live in the config, not in a state dir, so a dotfiles checkout
 carries them to new machines.
 
+## Releasing
+
+Run the *Prepare release* workflow with a bump (patch by default) or an exact
+version. It tags `master` once CI is
+green, and the release workflow builds the archives and updates the Homebrew
+formula in `ike-forge/homebrew-tap`. That last step needs a `HOMEBREW_TAP_TOKEN`
+secret with push access to the tap.
+
 ## Open questions
 
 - Whether to add non-interactive flags (`vimify apply --all`) for scripting.
