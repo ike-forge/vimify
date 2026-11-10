@@ -15,6 +15,8 @@ dispatch-releases = true
 # rustls pulls in aws-lc-rs, which compiles C; build ARM Linux natively rather than cross.
 [dist.github-custom-runners]
 aarch64-unknown-linux-gnu = "ubuntu-24.04-arm"
+# The default macos-14 arm64 runner is unsupported here; cross-compile from Intel.
+aarch64-apple-darwin = "macos-15-intel"
 
 [dist.github-action-commits]
 "actions/checkout" = "3d3c42e5aac5ba805825da76410c181273ba90b1" # v7.0.1
