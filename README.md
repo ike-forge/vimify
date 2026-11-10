@@ -93,10 +93,3 @@ See [stack.md](stack.md) for the full task list.
 
 `mise run screenshots` regenerates `docs/img` from the real tools under a throwaway
 `HOME`. It needs tmux, Pillow and the sandbox kind cluster.
-
-## Releasing
-
-Run the *Prepare release* workflow with a version. It tags `master` once CI is
-green, and the release workflow builds the archives and updates the Homebrew
-formula in `ike-forge/homebrew-tap`. That last step needs a `HOMEBREW_TAP_TOKEN`
-secret with push access to the tap.
