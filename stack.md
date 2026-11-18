@@ -110,7 +110,3 @@ version. It tags `master` once CI is
 green, and the release workflow builds the archives and updates the Homebrew
 formula in `ike-forge/homebrew-tap`. That last step needs a `HOMEBREW_TAP_TOKEN`
 secret with push access to the tap.
-
-## Open questions
-
-- Whether to add non-interactive flags (`vimify apply --all`) for scripting.

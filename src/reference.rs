@@ -78,6 +78,33 @@ pub fn load() -> Result<Reference> {
     }
 }
 
+/// For unattended runs. `exclusions` must be set, `[]` included: without it, the run
+/// would touch every tool the user never chose. Unknown names fail, so a typo cannot
+/// apply to a tool the user meant to exclude.
+pub fn load_saved(known: &[&str]) -> Result<Reference> {
+    let path = path().context("cannot resolve vimify config path")?;
+    let text = read(&path)?.with_context(|| format!("{} not found", path.display()))?;
+    parse_saved(&text, known).with_context(|| format!("{}", path.display()))
+}
+
+fn parse_saved(text: &str, known: &[&str]) -> Result<Reference> {
+    let doc: DocumentMut = text.parse()?;
+    if !doc.contains_key("exclusions") {
+        bail!(
+            "exclusions not set: run `vimify apply` once, or set `exclusions = []` to apply to every tool"
+        );
+    }
+    let reference = parse(text)?;
+    if let Some(tool) = reference
+        .exclusions
+        .iter()
+        .find(|t| !known.contains(&t.as_str()))
+    {
+        bail!("exclusions: unknown tool {tool}");
+    }
+    Ok(reference)
+}
+
 /// A partial `[keys]` rebinds those actions; the rest keep their defaults.
 fn parse(text: &str) -> Result<Reference> {
     let mut reference: Reference = toml::from_str(text)?;
@@ -92,7 +119,8 @@ fn parse(text: &str) -> Result<Reference> {
     Ok(reference)
 }
 
-/// Rewrites only `exclusions`; the rest of the user's file is untouched.
+/// Rewrites only `exclusions`; the rest of the user's file is untouched. An empty list
+/// is still written: `load_saved` requires the key.
 pub fn save_exclusions(exclusions: &[String]) -> Result<()> {
     update(|text| with_exclusions(text, exclusions))
 }
@@ -123,9 +151,6 @@ fn read(path: &Path) -> Result<Option<String>> {
 
 fn with_exclusions(text: &str, exclusions: &[String]) -> Result<String> {
     let mut doc: DocumentMut = text.parse()?;
-    if exclusions.is_empty() && !doc.contains_key("exclusions") {
-        return Ok(text.to_owned());
-    }
     doc["exclusions"] = value(exclusions.iter().map(String::as_str).collect::<Array>());
     Ok(doc.to_string())
 }
@@ -224,8 +249,41 @@ mod tests {
     }
 
     #[test]
-    fn no_exclusions_leaves_file_untouched() {
-        assert_eq!(with_exclusions("", &[]).unwrap(), "");
+    fn no_exclusions_still_saves_the_selection() {
+        assert_eq!(with_exclusions("", &[]).unwrap(), "exclusions = []\n");
+    }
+
+    const KNOWN: &[&str] = &["btop", "lazygit"];
+
+    #[test]
+    fn saved_config_loads() {
+        let reference = parse_saved("exclusions = [\"btop\"]\n", KNOWN).unwrap();
+        assert_eq!(reference.exclusions, strings(&["btop"]));
+    }
+
+    #[test]
+    fn saved_config_needs_exclusions() {
+        let err = parse_saved("theme = \"a\"\n", KNOWN).unwrap_err();
+        assert!(err.to_string().contains("exclusions not set"));
+    }
+
+    #[test]
+    fn saved_config_accepts_empty_exclusions() {
+        let reference = parse_saved("exclusions = []\n", KNOWN).unwrap();
+        assert!(reference.exclusions.is_empty());
+    }
+
+    #[test]
+    fn saved_config_rejects_malformed_exclusions() {
+        assert!(parse_saved("exclusions = \"btop\"\n", KNOWN).is_err());
+        assert!(parse_saved("exclusions = [1]\n", KNOWN).is_err());
+        assert!(parse_saved("exclusions = [\n", KNOWN).is_err());
+    }
+
+    #[test]
+    fn saved_config_rejects_unknown_tools() {
+        let err = parse_saved("exclusions = [\"btpo\"]\n", KNOWN).unwrap_err();
+        assert!(err.to_string().contains("unknown tool btpo"));
     }
 
     #[test]

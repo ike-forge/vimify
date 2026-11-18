@@ -2,7 +2,8 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::edit;
-use crate::port::{Port, Target};
+use crate::port::{self, Port, Target};
+use crate::scan::Detection;
 use crate::state::{self, Applied, AppliedFile, State};
 
 #[derive(Debug, PartialEq, Eq)]
@@ -78,6 +79,36 @@ impl Action {
     pub fn writes(&self) -> bool {
         !matches!(self, Action::Current { .. } | Action::Unsupported)
     }
+}
+
+/// What the select screen starts with checked, and the port each detection resolved to.
+/// Unsupported tools are in neither list, as on that screen.
+pub fn preselect(
+    found: &[Detection],
+    ports: &[Port],
+    exclusions: &[String],
+) -> (Selection, Vec<Port>) {
+    let mut selection = Selection {
+        selected: Vec::new(),
+        excluded: Vec::new(),
+    };
+    let mut resolved = Vec::new();
+    for detection in found {
+        let Some((port, _)) = port::resolve(ports, &detection.port, detection.version.as_ref())
+        else {
+            continue;
+        };
+        if port.writable() {
+            let name = detection.port.clone();
+            if exclusions.contains(&name) {
+                selection.excluded.push(name);
+            } else {
+                selection.selected.push(name);
+            }
+        }
+        resolved.push(port);
+    }
+    (selection, resolved)
 }
 
 /// Checkboxes are desired state; diffing against `state` yields the ops.
@@ -528,5 +559,28 @@ mod tests {
         let previous = strings(&["gone", "back"]);
         let out = exclusions(&previous, &selection(&["back"], &["new"]));
         assert_eq!(out, strings(&["gone", "new"]));
+    }
+
+    fn detected(name: &str) -> Detection {
+        Detection {
+            port: name.into(),
+            path: PathBuf::from(name),
+            version: None,
+        }
+    }
+
+    #[test]
+    fn preselect_checks_supported_tools_not_excluded() {
+        let dir = TempDir::new().unwrap();
+        let path = || Some(vec![dir.path().join("c.yml").display().to_string()]);
+        let ports = [
+            port("a", "1", path()),
+            port("b", "1", path()),
+            port("none", "1", None),
+        ];
+        let found = ["a", "b", "none"].map(detected);
+        let (chosen, resolved) = preselect(&found, &ports, &strings(&["b"]));
+        assert_eq!(chosen, selection(&["a"], &["b"]));
+        assert_eq!(resolved.len(), 3);
     }
 }

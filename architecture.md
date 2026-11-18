@@ -19,6 +19,7 @@
 | `vimify`          | Prints help                                                       |
 | `vimify config`   | Edits theme and keys. Saves only; applied tools plan as `update` on the next apply |
 | `vimify apply`    | The flow below                                                    |
+| `vimify apply -y` | No UI: scan, take the select screen's initial checks, execute. Fails without a config file, on an invalid one, or without `exclusions` (`[]` opts in to every tool). An unknown tool in `exclusions` is invalid. Leaves `exclusions` as saved |
 | `vimify rollback` | Lists applied tools, all unchecked; checked ones revert through confirm and execute, and join `exclusions`. No scan: revert needs only state |
 
 ## Flow
@@ -44,7 +45,8 @@ scan ──▶ select ──▶ plan ──▶ confirm ──▶ execute ──�
    | no      | yes     | revert                     |
    | no      | no      | none                       |
 
-   Unchecked tools are written to `exclusions`.
+   Unchecked tools are written to `exclusions`, as `[]` when none are, which is
+   what lets `apply -y` run.
 4. **confirm:** the override warning, listing every file to apply and revert.
 5. **execute:** per tool, independently. One failure does not stop the others.
 

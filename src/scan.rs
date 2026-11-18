@@ -60,6 +60,26 @@ pub fn spawn(dirs: Vec<PathBuf>, ports: Vec<Port>) -> Receiver<Event> {
     rx
 }
 
+/// Blocking `spawn`, for runs without the UI.
+pub fn detect(dirs: &[PathBuf], ports: &[Port]) -> Vec<Detection> {
+    let (tx, rx) = mpsc::channel();
+    scan(dirs, ports, &tx).expect("receiver outlives the scan");
+    drop(tx);
+    let mut found: Vec<Detection> = Vec::new();
+    for event in rx {
+        match event {
+            Event::Found(d) => found.push(d),
+            Event::Version { port, version } => {
+                if let Some(d) = found.iter_mut().find(|d| d.port == port) {
+                    d.version = Some(version);
+                }
+            }
+            Event::Scanned { .. } | Event::Done => {}
+        }
+    }
+    found
+}
+
 pub fn scan(dirs: &[PathBuf], ports: &[Port], tx: &Sender<Event>) -> Result<(), SendError<Event>> {
     let mut found = HashSet::new();
     let mut detected = Vec::new();
@@ -355,5 +375,16 @@ mod tests {
             resolve_dirs([path, missing.as_str(), dup.as_str()]),
             [PathBuf::from(path)]
         );
+    }
+
+    #[test]
+    fn detect_carries_the_version() {
+        let dir = TempDir::new().unwrap();
+        std::os::unix::fs::symlink("/bin/sh", dir.path().join("tool")).unwrap();
+        let mut tool = port("tool", &["tool"]);
+        tool.version_args = vec!["-c".into(), "echo tool 1.2.3".into()];
+        let found = detect(&[dir.path().into()], &[tool]);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].version, Some(Version::new(1, 2, 3)));
     }
 }

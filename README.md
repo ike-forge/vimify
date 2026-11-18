@@ -30,6 +30,7 @@ managers.
 ```sh
 vimify config     # edit theme and keys
 vimify apply      # scan, select tools, apply
+vimify apply -y   # no prompts: apply to every detected tool not in `exclusions`
 vimify rollback   # take vimify's keys back out of selected tools
 ```
 
