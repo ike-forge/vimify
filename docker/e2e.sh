@@ -62,7 +62,8 @@ reset() {
   close
   rm -rf ~/.config/lazygit ~/.config/lazydocker ~/.config/lfk ~/.config/lazysql \
     ~/.config/bat ~/.config/btop ~/.config/k9s ~/.config/yazi ~/.stu ~/.config/lesskey ~/.config/gitui \
-    ~/.config/vimify ~/.local/state/vimify ~/.cache/vimify
+    ~/.config/vimify ~/.local/state/vimify ~/.cache/vimify \
+    ~/.config/tmux ~/.config/kitty ~/.config/alacritty ~/.tmux.conf ~/.tmux.conf.bak*
   mkdir -p ~/.config/lazysql
   cp /tmp/lazysql.seed "$LAZYSQL"
 }
@@ -385,8 +386,8 @@ test_info_modal_shows_what_a_port_covers() {
   reset
   tmux -u new-session -d -s app -x 150 -y 40 'vimify apply 2>&1; echo EXIT=$?; sleep 60'
   wait_for 'select all' || return
-  # The tools sort as bat, btop, gitui, k9s, lazydocker.
-  tmux -u send-keys -t app j j j j j j j i
+  # The tools sort as alacritty, bat, btop, gitui, k9s, kitty, lazydocker.
+  tmux -u send-keys -t app j j j j j j j j j i
   wait_for 'any key closes' || return
   on_screen 'Keys *none'
   on_screen 'Theme *4 settings'
@@ -410,6 +411,9 @@ test_versions_are_detected_and_shown() {
   on_screen 'gitui .*0\.28\.1 .*supported'
   on_screen 'stu .*0\.7\.6 .*supported'
   on_screen 'less .*supported'
+  on_screen 'tmux .*3\.5\.0 .*supported'
+  on_screen 'kitty .*0\.41\.1 .*supported'
+  on_screen 'alacritty .*0\.15\.1 .*supported'
   close
 }
 
@@ -654,6 +658,45 @@ test_less_honours_what_vimify_wrote() {
   close
   revert
   absent ~/.config/lesskey
+}
+
+test_tmux_loads_what_vimify_wrote() {
+  reset
+  printf 'set-option -g mouse on\n' >~/.tmux.conf
+  cp ~/.tmux.conf /tmp/original
+  mkdir -p ~/.config/vimify
+  printf '[keys]\nyank = "Y"\n' >"$REFERENCE"
+  apply
+  # Its own socket: the harness server loaded ~/.tmux.conf before the apply.
+  tmux -L vimify -f ~/.tmux.conf new-session -d -s probe
+  local keys
+  keys=$(tmux -L vimify list-keys -T copy-mode-vi)
+  printf '%s' "$keys" | grep -q 'Y  *send-keys -X copy-selection-and-cancel' ||
+    fail 'Y does not yank in copy mode'
+  printf '%s' "$keys" | grep -q 'search-forward' || fail '/ does not search'
+  [ "$(tmux -L vimify show -gwv mode-keys)" = vi ] || fail 'mode-keys is not vi'
+  [ "$(tmux -L vimify show -gv mouse)" = on ] || fail 'the user option was lost'
+  tmux -L vimify show-messages | grep -qi error && fail 'tmux reported config errors'
+  tmux -L vimify kill-server
+  revert
+  is_original ~/.tmux.conf
+}
+
+test_terminals_get_the_palette() {
+  reset
+  mkdir -p ~/.config/kitty ~/.config/alacritty
+  printf 'font_size 12.0\n' >~/.config/kitty/kitty.conf
+  printf '[font]\nsize = 12.0\n' >~/.config/alacritty/alacritty.toml
+  cp ~/.config/kitty/kitty.conf /tmp/kitty.original
+  cp ~/.config/alacritty/alacritty.toml /tmp/alacritty.original
+  apply
+  in_file ~/.config/kitty/kitty.conf 'background #303446'
+  in_file ~/.config/kitty/kitty.conf 'color6 #81c8be'
+  in_file ~/.config/alacritty/alacritty.toml 'cyan = "#81c8be"'
+  revert
+  cmp -s ~/.config/kitty/kitty.conf /tmp/kitty.original || fail 'kitty.conf not restored'
+  cmp -s ~/.config/alacritty/alacritty.toml /tmp/alacritty.original ||
+    fail 'alacritty.toml not restored'
 }
 
 test_gitui_honours_what_vimify_wrote() {

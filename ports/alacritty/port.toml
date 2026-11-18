@@ -1,0 +1,46 @@
+schema = 1
+version = "0.1.0"
+binaries = ["alacritty"]
+# The config moved from YAML to TOML in 0.13.
+versions = ">=0.13"
+
+notes = "Theme only: a vi mode binding needs its key, modifiers and mode written together, which vimify cannot do yet. Vi mode's own keys already are h, j, k, l, y, g, G, ctrl+u, ctrl+d and /. Settings here override any imported theme."
+
+[[target]]
+format = "toml"
+strategy = "edit"
+paths = [
+  "$XDG_CONFIG_HOME/alacritty/alacritty.toml",
+  "$XDG_CONFIG_HOME/alacritty.toml",
+  "~/.alacritty.toml",
+]
+
+[target.theme]
+"colors.primary.foreground" = "{text}"
+"colors.primary.background" = "{base}"
+"colors.cursor.text" = "{base}"
+"colors.cursor.cursor" = "{text}"
+"colors.vi_mode_cursor.text" = "{base}"
+"colors.vi_mode_cursor.cursor" = "{accent}"
+"colors.selection.text" = "{text}"
+"colors.selection.background" = "{selection}"
+"colors.search.matches.foreground" = "{base}"
+"colors.search.matches.background" = "{warning}"
+"colors.search.focused_match.foreground" = "{base}"
+"colors.search.focused_match.background" = "{accent}"
+"colors.normal.black" = "{border}"
+"colors.normal.red" = "{error}"
+"colors.normal.green" = "{success}"
+"colors.normal.yellow" = "{warning}"
+"colors.normal.blue" = "{accent}"
+"colors.normal.magenta" = "{special}"
+"colors.normal.cyan" = "{info}"
+"colors.normal.white" = "{text}"
+"colors.bright.black" = "{muted}"
+"colors.bright.red" = "{error}"
+"colors.bright.green" = "{success}"
+"colors.bright.yellow" = "{warning}"
+"colors.bright.blue" = "{accent}"
+"colors.bright.magenta" = "{special}"
+"colors.bright.cyan" = "{info}"
+"colors.bright.white" = "{text}"

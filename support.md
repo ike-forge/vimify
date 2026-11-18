@@ -12,12 +12,15 @@ blank: the tool has no such action
 | lazygit    | ≥ 0.66   |  ✅  |  ✅  |  ✅  |  ✅   |  ✅  |   ✅   |  ✅  |  ✅   |
 | yazi       | ≥ 26.9   |  ✅  |  ✅  |  ✅  |  ✅   |  ✅  |   ✅   |  ✅  |  ✅   |
 | gitui      | ≥ 0.28   |  ✅  |  ✅  |  ✅  |  ✅   |  ✅  |   ✅   |  ✅  |  ✅   |
+| tmux       | ≥ 2.4    |  ✅  |  ✅  |  ✅  |  ✅   |  ✅  |        |  ✅  |  ✅   |
 | lfk        | ≥ 0.19   |  ✅  |  ✅  |  ✅  |  ✅   |  ✅  |   ✅   |  ➖  |  ✅   |
 | lazysql    | ≥ 0.7    |  ❌  |  ✅  |  ✅  |  ❌   |  ✅  |   ✅   |  ✅  |  ✅   |
 | less       | ≥ 582    |  ✅  |  ✅  |  ✅  |  ✅   |      |        |  ✅  |  ❌   |
 | stu        | ≥ 0.7    |  🟡  |  ✅  |  ✅  |  🟡   |  ✅  |        |  ❌  |  ➖   |
 | lazydocker | ≥ 0.25   |  ➖  |  ➖  |  ➖  |  ➖   |      |   ➖   |  ➖  |  ✅   |
 | btop       | ≥ 1.3    |  ➖  |  ➖  |  ➖  |  ➖   |      |        |  ➖  |  ✅   |
+| alacritty  | ≥ 0.13   |  ❌  |  ❌  |  ❌  |  ❌   |  ❌  |        |      |  ✅   |
+| kitty      | ≥ 0.41   |  ➖  |  ➖  |  ➖  |  ➖   |  ➖  |        |  ➖  |  ✅   |
 | bat        | ≥ 0.25   |  ➖  |  ➖  |  ➖  |  ➖   |      |        |  ➖  |  🟡   |
 | k9s        | ≥ 0.40   |  ➖  |  ➖  |  ➖  |  ➖   |  ➖  |   ➖   |  ➖  |  ✅   |
 
@@ -26,12 +29,15 @@ blank: the tool has no such action
 | lazygit    | ❌  |   ❌   |   🟡    |    🟡     |   ✅   |  🟡  |
 | yazi       | ❌  |   ✅   |   ✅    |    ✅     |   ✅   |  ❌  |
 | gitui      | ✅  |   ✅   |   ✅    |    ✅     |   ✅   |  ✅  |
+| tmux       | ✅  |   ✅   |   ✅    |    ✅     |   ✅   |  ❌  |
 | lfk        | ➖  |   ➖   |   ➖    |    ➖     |   ✅   |  🟡  |
 | lazysql    | ✅  |   ✅   |   🟡    |    🟡     |   ✅   |  ✅  |
 | less       | ✅  |   ✅   |   ✅    |    ✅     |   ✅   |  ❌  |
 | stu        | ✅  |   ✅   |   ✅    |    ✅     |   ✅   |  ✅  |
 | lazydocker | ➖  |   ➖   |   ➖    |    ➖     |   ➖   |  ➖  |
 | btop       | ➖  |   ➖   |   ➖    |    ➖     |   ➖   |  ➖  |
+| alacritty  | ❌  |   ❌   |   ❌    |    ❌     |   ❌   |      |
+| kitty      | ➖  |   ➖   |   ➖    |    ➖     |   ➖   |  ➖  |
 | bat        | ➖  |   ➖   |   ➖    |    ➖     |   ➖   |  ➖  |
 | k9s        | ➖  |   ➖   |   ➖    |    ➖     |   ➖   |  ➖  |
 
@@ -62,6 +68,9 @@ major version ([architecture.md](architecture.md#sources-and-versioning)).
   Colours are built in.
 - **btop**: keys are btop's vim mode, hardcoded to h, j, k and l. Rebinding them in
   the reference has no effect. btop rewrites `btop.conf` on exit and drops comments.
+- **tmux**: keys cover copy mode only; prefix bindings stay as they are. tmux's own
+  copy-mode-vi keys keep working beside these. help is not mapped: ? is backward
+  search, as in vim. Takes effect in a new tmux server, or after `tmux source-file`.
 - **lfk**: quit, top, bottom and paging stay on q, g, G, ctrl+u and ctrl+d, which lfk
   hardcodes. help takes the keymaps panel (`?`); F1 still opens the help screen.
   delete takes resource deletion, which confirms first, and diff moves from d to D.
@@ -69,6 +78,13 @@ major version ([architecture.md](architecture.md#sources-and-versioning)).
   in. A skin set per cluster or context wins over it.
 - **lazydocker**: theme only; it has no configurable keybindings. Its own h, j, k, l,
   d and q are already vim's.
+- **alacritty**: theme only. A vi mode binding needs its key, modifiers and mode
+  written together, which vimify cannot do yet. Vi mode's own keys already are h, j,
+  k, l, y, g, G, ctrl+u, ctrl+d and /. The theme overrides any imported one.
+- **kitty**: theme only, including the 16 terminal colours that bat and other `ansi`
+  themes draw with. kitty has no modal keys, so binding a plain j would stop it being
+  typed. Scrollback opens in less, which the less port rebinds. A theme chosen later
+  with `kitty +kitten themes` lands after the vimify block and wins.
 - **bat**: no keybindings; output longer than a screen pages through less, so its keys
   are less's: j, k and q, and sideways scrolling. The less port rebinds them. Theme is
   `ansi`, so syntax colours follow the terminal palette: bat ships no Catppuccin
@@ -92,7 +108,10 @@ major version ([architecture.md](architecture.md#sources-and-versioning)).
 | less       | `lesskey` (marked block), or `~/.lesskey` if it exists        |
 | lazydocker | `lazydocker/config.yml`                                       |
 | bat        | `bat/config` (marked block)                                   |
+| tmux       | `~/.tmux.conf` (marked block), or `tmux/tmux.conf` if only it exists |
+| kitty      | `kitty/kitty.conf` (marked block)                             |
+| alacritty  | `alacritty/alacritty.toml`, or `alacritty.toml`, `~/.alacritty.toml` if it exists |
 
 Paths are relative to `$XDG_CONFIG_HOME` unless they start with `~`, or a tool's own
 variable when set (`$LG_CONFIG_FILE`, `$K9S_CONFIG_DIR`, `$LFK_CONFIG_DIR`,
-`$STU_ROOT_DIR`, `$YAZI_CONFIG_HOME`, `$LESSKEYIN`, ...).
+`$STU_ROOT_DIR`, `$YAZI_CONFIG_HOME`, `$LESSKEYIN`, `$KITTY_CONFIG_DIRECTORY`, ...).

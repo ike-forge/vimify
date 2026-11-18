@@ -81,7 +81,8 @@ if you also edit them outside vimify.
 
 ## Supported tools
 
-lazygit, yazi, gitui, lfk, lazysql, less, stu, lazydocker, btop, bat and k9s, from
+lazygit, yazi, gitui, tmux, lfk, lazysql, less, stu, lazydocker, btop, alacritty,
+kitty, bat and k9s, from
 most to least covered. Coverage varies with what each tool lets you configure: see
 [support.md](support.md).
 

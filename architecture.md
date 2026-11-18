@@ -169,7 +169,7 @@ A key the notation cannot express skips that binding with a warning.
 | --------- | -------------------------------------------- | ------------------------------ |
 | `edit`    | Owned key paths in place, via format editor  | Restore owned keys             |
 | `block`   | Region between `# >>> vimify >>>` markers    | Remove block                   |
-| `include` | Not implemented: no port needs it yet        |                                |
+| `include` | Not implemented: only for a tool `edit` and `block` cannot reach ([stack.md](stack.md#tool-config-editing)) | |
 
 Format editors share one trait so `yaml-edit` stays swappable
 ([stack.md](stack.md#tool-config-editing)):

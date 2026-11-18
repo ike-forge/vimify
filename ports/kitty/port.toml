@@ -1,0 +1,42 @@
+schema = 1
+version = "0.1.0"
+binaries = ["kitty"]
+versions = ">=0.41"
+
+notes = "Theme only: kitty has no modal keys, so binding a plain j would stop it being typed. Scrollback opens in less, which the less port rebinds. Lines after the vimify block override it, including a theme chosen later with `kitty +kitten themes`."
+
+[[target]]
+format = "lines"
+strategy = "block"
+paths = ["$KITTY_CONFIG_DIRECTORY/kitty.conf", "$XDG_CONFIG_HOME/kitty/kitty.conf"]
+template = '''
+foreground {text}
+background {base}
+selection_foreground {text}
+selection_background {selection}
+cursor {text}
+cursor_text_color {base}
+url_color {accent}
+active_border_color {accent}
+inactive_border_color {border}
+active_tab_foreground {base}
+active_tab_background {accent}
+inactive_tab_foreground {text}
+inactive_tab_background {surface}
+tab_bar_background {surface}
+color0 {border}
+color1 {error}
+color2 {success}
+color3 {warning}
+color4 {accent}
+color5 {special}
+color6 {info}
+color7 {text}
+color8 {muted}
+color9 {error}
+color10 {success}
+color11 {warning}
+color12 {accent}
+color13 {special}
+color14 {info}
+color15 {text}'''

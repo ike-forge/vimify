@@ -18,7 +18,7 @@ ARG TARGETARCH
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-       bat btop ca-certificates curl git less python3 sqlite3 tmux unzip \
+       alacritty bat btop ca-certificates curl git kitty less python3 sqlite3 tmux unzip \
     && rm -rf /var/lib/apt/lists/*
 # Debian ships bat as batcat.
 RUN ln -s /usr/bin/batcat /usr/local/bin/bat

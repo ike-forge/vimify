@@ -272,6 +272,8 @@ const HOME_CONFIG_DIRS: &[&str] = &[
     "Library/Application Support/",
     ".stu/",
     ".lesskey",
+    ".tmux.conf",
+    ".alacritty.toml",
 ];
 
 /// A port must not reach arbitrary files. This bounds the damage; it does not replace

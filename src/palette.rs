@@ -15,6 +15,7 @@ pub const ROLES: &[&str] = &[
     "warning",
     "error",
     "special",
+    "info",
     "base",
     "surface",
 ];

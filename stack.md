@@ -21,9 +21,9 @@ not own.
 | RON                | Own field editor, values verbatim                  |
 | Line-based (`txt`) | Owned block between `# >>> vimify >>>` markers     |
 
-Preferred over all of the above: if the tool supports `include`/`import`/
-`source` (kitty, tmux, alacritty, git), write a vimify-owned file and add one
-include line.
+Not `include`/`import`/`source` of a vimify-owned file, even where a tool
+supports it: most tools cannot, and every tool should behave the same. Only for a
+tool with no other way.
 
 > **Weak point:** `yaml-edit` is a single-maintainer crate with little adoption.
 > It passed preservation tests on lazygit-style configs (nested set, key insert,
