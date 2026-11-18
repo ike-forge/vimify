@@ -1,4 +1,5 @@
 mod block;
+mod file;
 mod lines;
 mod ron;
 mod toml;
@@ -34,9 +35,10 @@ pub fn supports(format: Format, strategy: Strategy) -> bool {
     matches!(
         (format, strategy),
         (
-            Format::Yaml | Format::Toml | Format::Ron | Format::Lines,
+            Format::Yaml | Format::Toml | Format::Ron | Format::Lines | Format::Args,
             Strategy::Edit
         ) | (Format::Lines, Strategy::Block)
+            | (_, Strategy::File)
     )
 }
 
@@ -46,7 +48,9 @@ pub fn open(format: Format, strategy: Strategy, text: &str) -> Result<Box<dyn Ed
         (Format::Toml, Strategy::Edit) => Ok(Box::new(toml::TomlEditor::parse(text)?)),
         (Format::Ron, Strategy::Edit) => Ok(Box::new(ron::RonEditor::parse(text)?)),
         (Format::Lines, Strategy::Edit) => Ok(Box::new(lines::LinesEditor::parse(text))),
+        (Format::Args, Strategy::Edit) => Ok(Box::new(lines::LinesEditor::args(text))),
         (Format::Lines, Strategy::Block) => Ok(Box::new(block::BlockEditor::parse(text)?)),
+        (_, Strategy::File) => Ok(Box::new(file::FileEditor::parse(text))),
         _ => bail!("no editor for {format:?} with {strategy:?}"),
     }
 }

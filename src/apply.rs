@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::{fs, io};
 
 use anyhow::{Context as _, Result, ensure};
@@ -7,7 +8,7 @@ use anyhow::{Context as _, Result, ensure};
 use crate::edit::Value;
 use crate::palette::Palette;
 use crate::plan::{Action, Op};
-use crate::port::{Port, Target};
+use crate::port::{Port, Strategy, Target};
 use crate::reference::Reference;
 use crate::state::{self, Applied, AppliedFile, State};
 use crate::{backup, edit, fsx, render};
@@ -17,6 +18,8 @@ pub struct Context<'a> {
     pub reference: &'a Reference,
     pub palette: &'a Palette,
     pub reference_hash: &'a str,
+    /// Where `refresh_args` look for the tool, as the scan does.
+    pub scan_dirs: &'a [PathBuf],
 }
 
 pub struct Report<'a> {
@@ -42,9 +45,43 @@ pub fn execute<'a>(
                 Action::Revert { .. } => revert_tool(&op.tool, state, persist),
                 Action::Current { .. } | Action::Unsupported => Ok(Vec::new()),
             };
+            let result = result.map(|mut warnings| {
+                warnings.extend(refresh(&op.tool, cx));
+                warnings
+            });
             Report { op, result }
         })
         .collect()
+}
+
+/// A failed refresh leaves the files right, so it warns instead of failing the tool.
+fn refresh(tool: &str, cx: &Context) -> Option<String> {
+    let port = cx.ports.iter().find(|p| p.name == tool)?;
+    if port.refresh_args.is_empty() {
+        return None;
+    }
+    let command = || format!("{tool} {}", port.refresh_args.join(" "));
+    let Some(binary) = cx
+        .scan_dirs
+        .iter()
+        .flat_map(|dir| port.binaries.iter().map(move |b| dir.join(b)))
+        .find(|path| path.is_file())
+    else {
+        return Some(format!("{tool} not found: run `{}` yourself", command()));
+    };
+    let output = Command::new(&binary)
+        .args(&port.refresh_args)
+        .stdin(Stdio::null())
+        .output();
+    match output {
+        Ok(output) if output.status.success() => None,
+        Ok(output) => Some(format!(
+            "`{}` failed: {}",
+            command(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        )),
+        Err(e) => Some(format!("`{}` failed: {e}", command())),
+    }
 }
 
 pub struct Output {
@@ -64,7 +101,11 @@ pub fn transform(
     let mut editor = edit::open(target.format, target.strategy, text)?;
     let mut owned = BTreeMap::new();
     for (setting, value) in rendered.values {
-        editor.set(&split(&setting), value.clone())?;
+        let path = split(&setting);
+        // Rewriting an equal value can still change quoting or layout.
+        if editor.get(&path).as_ref() != Some(&value) {
+            editor.set(&path, value.clone())?;
+        }
         owned.insert(setting, value);
     }
     Ok(Output {
@@ -103,15 +144,25 @@ fn apply_tool(
         !paths.is_empty() && port.targets.len() == paths.len(),
         "port has no target for each file of {tool}"
     );
+    let previous = state.tools.get(tool).cloned();
     let pending = port
         .targets
         .iter()
         .zip(paths)
         .map(|(target, path)| {
             let existing = read(path)?;
-            let original = existing.as_deref().unwrap_or_default();
-            let output = transform(tool, target, cx.reference, cx.palette, original)
-                .with_context(|| format!("{}", path.display()))?;
+            let recorded = previous
+                .iter()
+                .flat_map(|a| &a.files)
+                .find(|f| f.path == *path);
+            let output = (|| {
+                let original = match (&existing, recorded) {
+                    (Some(text), Some(file)) if !same_editor(file, target) => unapply(file, text)?,
+                    _ => existing.clone().unwrap_or_default(),
+                };
+                transform(tool, target, cx.reference, cx.palette, &original)
+            })()
+            .with_context(|| format!("{}", path.display()))?;
             Ok(Pending {
                 path,
                 existing,
@@ -121,7 +172,6 @@ fn apply_tool(
         })
         .collect::<Result<Vec<_>>>()?;
 
-    let previous = state.tools.get(tool).cloned();
     let mut files = Vec::new();
     let mut warnings = Vec::new();
     for file in &pending {
@@ -256,9 +306,11 @@ fn prepare_restore(file: &AppliedFile) -> Result<Restore<'_>> {
     let current = read(path)?;
     // Only an edited file needs key-by-key: the backup restores anything else byte for
     // byte, which rewriting keys cannot promise.
+    // A file target has no keys around vimify's to keep; revert backs up the edits.
     let edited = current
         .as_ref()
-        .filter(|text| state::hash(text.as_bytes()) != file.file_hash);
+        .filter(|text| state::hash(text.as_bytes()) != file.file_hash)
+        .filter(|_| file.strategy != Strategy::File);
     let (text, permissions) = match (edited, original) {
         (Some(text), original) => {
             let source = original.as_ref().map_or("", |(text, _)| text);
@@ -275,6 +327,22 @@ fn prepare_restore(file: &AppliedFile) -> Result<Restore<'_>> {
         text,
         permissions,
     })
+}
+
+fn same_editor(file: &AppliedFile, target: &Target) -> bool {
+    (file.format, file.strategy) == (target.format, target.strategy)
+}
+
+/// A port that changed format or strategy cannot find what the old one wrote, so the old
+/// editor takes it out first, or a block and an edited key would both stay.
+fn unapply(file: &AppliedFile, text: &str) -> Result<String> {
+    let original = match &file.backup {
+        Some(backup) => {
+            fs::read_to_string(backup).with_context(|| format!("backup {}", backup.display()))?
+        }
+        None => String::new(),
+    };
+    restore_keys(file, text, &original)
 }
 
 fn restore_keys(file: &AppliedFile, text: &str, original: &str) -> Result<String> {
@@ -308,6 +376,7 @@ mod tests {
         reference: Reference,
         palette: Palette,
         state: State,
+        scan_dirs: Vec<PathBuf>,
     }
 
     impl Fixture {
@@ -317,6 +386,7 @@ mod tests {
                 reference: Reference::default(),
                 palette: palette::load("catppuccin-frappe").unwrap(),
                 state: State::default(),
+                scan_dirs: Vec::new(),
             }
         }
 
@@ -339,6 +409,7 @@ mod tests {
                 reference: &self.reference,
                 palette: &self.palette,
                 reference_hash: hash,
+                scan_dirs: &self.scan_dirs,
             };
             let mut reports = execute(&ops, &cx, &mut self.state, persist);
             reports.remove(0).result
@@ -610,6 +681,7 @@ mod tests {
             reference: &fx.reference,
             palette: &fx.palette,
             reference_hash: "ref",
+            scan_dirs: &[],
         };
 
         let reports = execute(&ops, &cx, &mut state, &mut |_| Ok(()));
@@ -1089,6 +1161,141 @@ mod tests {
         assert_eq!(
             fs::read_to_string(&path).unwrap(),
             "--paging=never\n--wrap=never\n"
+        );
+    }
+
+    fn refreshing(dir: &TempDir) -> Fixture {
+        let mut fx = Fixture::new();
+        let text = PORT.replace(
+            "[[target]]",
+            "refresh_args = [\"cache\", \"--build\"]\n[[target]]",
+        );
+        fx.ports = vec![port::parse("t", &text).unwrap()];
+        fx.scan_dirs = vec![dir.path().to_owned()];
+        fx
+    }
+
+    #[test]
+    fn revert_of_an_edited_file_target_deletes_it_and_keeps_a_copy() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("vimify.tmTheme");
+        let text = "schema = 1\nversion = \"1\"\nbinaries = [\"t\"]\n[[target]]\nformat = \"xml\"\nstrategy = \"file\"\npaths = []\ntemplate = \"<a>{accent}</a>\"\n";
+        let mut fx = Fixture::new();
+        fx.ports = vec![port::parse("t", text).unwrap()];
+        fx.run(
+            Action::Create {
+                paths: vec![path.clone()],
+            },
+            "ref",
+        )
+        .unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "<a>#8caaee</a>\n");
+        fs::write(&path, "<a>mine</a>\n").unwrap();
+
+        fx.run(revert(&path), "ref").unwrap();
+
+        assert!(!path.exists());
+        assert_eq!(
+            fs::read_to_string(bak(&path, ".bak")).unwrap(),
+            "<a>mine</a>\n"
+        );
+    }
+
+    #[test]
+    fn apply_and_revert_run_the_refresh_command() {
+        let dir = TempDir::new().unwrap();
+        let path = config(&dir, "b: 1\n");
+        let bin = dir.path().join("t");
+        fs::write(
+            &bin,
+            "#!/bin/sh\necho \"$@\" >> \"$(dirname \"$0\")/ran\"\n",
+        )
+        .unwrap();
+        fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).unwrap();
+        let mut fx = refreshing(&dir);
+
+        let warnings = fx
+            .run(
+                Action::Apply {
+                    paths: vec![path.clone()],
+                },
+                "ref",
+            )
+            .unwrap();
+        fx.run(revert(&path), "ref").unwrap();
+
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let ran = fs::read_to_string(dir.path().join("ran")).unwrap();
+        assert_eq!(ran, "cache --build\ncache --build\n");
+    }
+
+    #[test]
+    fn a_missing_refresh_binary_warns_and_keeps_the_apply() {
+        let dir = TempDir::new().unwrap();
+        let path = config(&dir, "b: 1\n");
+        let mut fx = refreshing(&dir);
+
+        let warnings = fx
+            .run(
+                Action::Apply {
+                    paths: vec![path.clone()],
+                },
+                "ref",
+            )
+            .unwrap();
+
+        assert_eq!(warnings, ["t not found: run `t cache --build` yourself"]);
+        assert!(fx.state.tools.contains_key("t"));
+    }
+
+    #[test]
+    fn an_equal_value_keeps_its_formatting() {
+        let fx = Fixture::new();
+        let target = &fx.ports[0].targets[0];
+        let text = "a:\n  down: \"j\"   # mine\n";
+        let out = transform("t", target, &fx.reference, &fx.palette, text).unwrap();
+        assert_eq!(out.text, text);
+        assert_eq!(out.owned["a.down"], Value::Str("j".into()));
+    }
+
+    #[test]
+    fn a_port_moving_from_block_to_edit_drops_the_block() {
+        let dir = TempDir::new().unwrap();
+        let path = config(&dir, "--theme=a\n--paging=never\n");
+        let head = "schema = 1\nversion = \"1\"\nbinaries = [\"t\"]\n[[target]]\npaths = []\n";
+        let block =
+            format!("{head}format = \"lines\"\nstrategy = \"block\"\ntemplate = \"--theme=x\"\n");
+        let edit = format!(
+            "{head}format = \"args\"\nstrategy = \"edit\"\n[target.theme]\n\"--theme\" = \"x\"\n"
+        );
+        let mut fx = Fixture::new();
+        fx.ports = vec![port::parse("t", &block).unwrap()];
+        fx.run(
+            Action::Apply {
+                paths: vec![path.clone()],
+            },
+            "ref",
+        )
+        .unwrap();
+        fx.ports = vec![port::parse("t", &edit).unwrap()];
+        fx.run(
+            Action::Update {
+                paths: vec![path.clone()],
+                manual: false,
+            },
+            "ref",
+        )
+        .unwrap();
+
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "--theme=x\n--paging=never\n"
+        );
+        assert_eq!(fx.state.tools["t"].files[0].owned.len(), 1);
+        fx.run(revert(&path), "ref").unwrap();
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "--theme=a\n--paging=never\n"
         );
     }
 

@@ -164,7 +164,8 @@ fn tool_version(path: &Path, args: &[String], integer: bool) -> Option<Version> 
 /// The first dotted number, or with `integer` the first number. Tools do not all use
 /// semver, hence no strict parse: `2024.01` has a leading zero.
 fn parse_version(text: &str, integer: bool) -> Option<Version> {
-    let mut rest = text;
+    let text = strip_ansi(text);
+    let mut rest = text.as_str();
     while let Some(start) = rest.find(|c: char| c.is_ascii_digit()) {
         let number = &rest[start..];
         let end = number
@@ -185,6 +186,22 @@ fn parse_version(text: &str, integer: bool) -> Option<Version> {
         rest = rest.trim_start_matches(|c: char| c.is_ascii_alphanumeric());
     }
     None
+}
+
+/// btop prints its version in bold, and `\e[1m1.4.8` would read as 4.8.
+fn strip_ansi(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' && chars.clone().next() == Some('[') {
+            chars
+                .by_ref()
+                .find(|c| ('@'..='~').contains(c) && *c != '[');
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -221,6 +238,10 @@ mod tests {
                 "0.19.4",
             ),
             ("bat 0.25.0", "0.25.0"),
+            (
+                "btop version: \x1b[1m1.4.8\x1b[0m\nCompiled with: g++ (14.2.0)",
+                "1.4.8",
+            ),
             ("btop version: 1.3.2", "1.3.2"),
             ("gitui 0.28.1", "0.28.1"),
             ("Yazi\n    Version: 26.9.1 (8dd895c 2026-09-01)", "26.9.1"),
@@ -285,6 +306,7 @@ mod tests {
             targets: Vec::new(),
             versions: VersionReq::STAR,
             version_args: Vec::new(),
+            refresh_args: Vec::new(),
             integer_version: false,
             notes: None,
         }

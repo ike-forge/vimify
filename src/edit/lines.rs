@@ -2,31 +2,75 @@ use anyhow::{Result, bail};
 
 use super::{Editor, Value};
 
-/// `key = value` lines, for configs that are neither TOML nor YAML (`vim_keys = True`).
-/// Values are verbatim, so a port writes any quotes the tool expects.
+/// Line-per-setting configs that are neither TOML nor YAML. Values are verbatim, so a
+/// port writes any quotes the tool expects.
 pub struct LinesEditor {
     lines: Vec<String>,
+    syntax: Syntax,
+}
+
+#[derive(Clone, Copy)]
+enum Syntax {
+    /// `vim_keys = True`
+    Assign,
+    /// Command-line flags, `--theme="ansi"` or `--theme ansi`, as in bat's config.
+    Args,
 }
 
 impl LinesEditor {
     pub fn parse(text: &str) -> Self {
+        Self::with(text, Syntax::Assign)
+    }
+
+    pub fn args(text: &str) -> Self {
+        Self::with(text, Syntax::Args)
+    }
+
+    fn with(text: &str, syntax: Syntax) -> Self {
         Self {
             lines: text.lines().map(str::to_owned).collect(),
+            syntax,
         }
+    }
+
+    fn reparse(&self, text: &str) -> Self {
+        Self::with(text, self.syntax)
     }
 
     fn find(&self, key: &str) -> Option<usize> {
-        self.lines.iter().position(|l| split(l).0 == Some(key))
-    }
-}
-
-/// Key and value of a line. Comments and blank lines have neither.
-fn split(line: &str) -> (Option<&str>, &str) {
-    match line.split_once('=') {
-        Some((key, value)) if !key.trim_start().starts_with('#') => {
-            (Some(key.trim()), value.trim())
+        let mut matches = self.lines.iter().map(|l| self.split(l).0 == Some(key));
+        match self.syntax {
+            Syntax::Assign => matches.position(|m| m),
+            // The last flag wins, so it is the one to replace.
+            Syntax::Args => matches.rposition(|m| m),
         }
-        _ => (None, ""),
+    }
+
+    /// Key and value of a line. Comments and blank lines have neither.
+    fn split<'a>(&self, line: &'a str) -> (Option<&'a str>, &'a str) {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with('#') {
+            return (None, "");
+        }
+        let parts = match self.syntax {
+            Syntax::Assign => line.split_once('='),
+            Syntax::Args => trimmed
+                .find(|c: char| c == '=' || c.is_whitespace())
+                .map(|i| (&trimmed[..i], &trimmed[i + 1..]))
+                .or(Some((trimmed, "")))
+                .filter(|(key, _)| key.starts_with('-')),
+        };
+        match parts {
+            Some((key, value)) => (Some(key.trim()), value.trim()),
+            None => (None, ""),
+        }
+    }
+
+    fn line(&self, key: &str, value: &str) -> String {
+        match self.syntax {
+            Syntax::Assign => format!("{key} = {value}"),
+            Syntax::Args => format!("{key}={value}"),
+        }
     }
 }
 
@@ -36,24 +80,28 @@ impl Editor for LinesEditor {
         let Value::Str(value) = value else {
             bail!("{key}: a list has no form in a lines config");
         };
-        match self.find(&key) {
-            Some(i) => {
+        let line = match (self.syntax, self.find(&key)) {
+            (Syntax::Assign, Some(i)) => {
                 let prefix = self.lines[i].split_once('=').map_or("", |(p, _)| p);
-                self.lines[i] = format!("{prefix}= {value}");
+                format!("{prefix}= {value}")
             }
-            None => self.lines.push(format!("{key} = {value}")),
+            _ => self.line(&key, &value),
+        };
+        match self.find(&key) {
+            Some(i) => self.lines[i] = line,
+            None => self.lines.push(line),
         }
         Ok(())
     }
 
     fn get(&self, path: &[&str]) -> Option<Value> {
         let line = &self.lines[self.find(&path.join("."))?];
-        Some(Value::Str(split(line).1.to_owned()))
+        Some(Value::Str(self.split(line).1.to_owned()))
     }
 
     fn restore(&mut self, path: &[&str], original: &str) -> Result<()> {
         let key = path.join(".");
-        let original = Self::parse(original);
+        let original = self.reparse(original);
         let line = original.find(&key).map(|i| original.lines[i].clone());
         match (self.find(&key), line) {
             (Some(i), Some(line)) => self.lines[i] = line,
@@ -153,6 +201,64 @@ mod tests {
     #[test]
     fn restore_returns_a_removed_key() {
         assert_eq!(restore("b = 2\n", "a", "a = 1\n"), "b = 2\na = 1\n");
+    }
+
+    fn edit_args(text: &str, key: &str, value: &str) -> String {
+        let mut editor = LinesEditor::args(text);
+        editor.set(&[key], str(value)).unwrap();
+        editor.render()
+    }
+
+    #[test]
+    fn args_replace_the_flag_in_place() {
+        let text = "# Mine\n--theme=\"Catppuccin Frappe\"\n--paging=never\n";
+        assert_eq!(
+            edit_args(text, "--theme", "\"ansi\""),
+            "# Mine\n--theme=\"ansi\"\n--paging=never\n"
+        );
+    }
+
+    #[test]
+    fn args_read_a_space_separated_flag() {
+        assert_eq!(
+            edit_args("--theme TwoDark\n", "--theme", "x"),
+            "--theme=x\n"
+        );
+        let editor = LinesEditor::args("  --theme   TwoDark\n");
+        assert_eq!(editor.get(&["--theme"]), Some(str("TwoDark")));
+    }
+
+    #[test]
+    fn args_replace_the_last_of_repeated_flags() {
+        assert_eq!(
+            edit_args("--theme=a\n--theme=b\n", "--theme", "x"),
+            "--theme=a\n--theme=x\n"
+        );
+    }
+
+    #[test]
+    fn args_append_a_missing_flag() {
+        assert_eq!(
+            edit_args("--paging=never\n", "--theme", "x"),
+            "--paging=never\n--theme=x\n"
+        );
+    }
+
+    #[test]
+    fn args_ignore_comments_and_other_flags() {
+        assert_eq!(
+            edit_args("#--theme=a\n--theme-dark=b\n", "--theme", "x"),
+            "#--theme=a\n--theme-dark=b\n--theme=x\n"
+        );
+    }
+
+    #[test]
+    fn args_restore_the_original_line() {
+        let mut editor = LinesEditor::args("--theme=x\n");
+        editor
+            .restore(&["--theme"], "--theme \"Two Dark\"\n")
+            .unwrap();
+        assert_eq!(editor.render(), "--theme \"Two Dark\"\n");
     }
 
     #[test]

@@ -79,8 +79,8 @@ version = "0.1.0"
 binaries = ["lazygit"]
 
 [[target]]
-format = "yaml"            # toml | yaml | ron | lines
-strategy = "edit"          # edit | block | include
+format = "yaml"            # toml | yaml | ron | lines | args | xml
+strategy = "edit"          # edit | block | file | include
 key_notation = "angle"     # how the tool spells <C-u>
 paths = [                  # first existing wins; first resolvable is created
   "$LG_CONFIG_FILE",
@@ -108,16 +108,21 @@ TOML settings reach into arrays of inline tables by a field of the entry:
 `"mgr.prepend_keymap[run=arrow next].on" = "down"`. A missing entry is appended, after
 the user's, and revert takes it back out.
 
-`lines` targets edit `key = value` lines, with values verbatim. A `block` target is
-one template instead of settings:
+`lines` targets edit `key = value` lines, `args` targets command-line flags
+(`--theme="ansi"`, the last of a repeated flag), both with values verbatim. A `block`
+target is one template instead of settings, for configs where a setting is not one
+line:
 
 ```toml
 [[target]]
 format = "lines"
 strategy = "block"
-paths = ["$XDG_CONFIG_HOME/bat/config"]
-template = '--theme="ansi"'
+paths = ["~/.tmux.conf", "$XDG_CONFIG_HOME/tmux/tmux.conf"]
+template = "set-option -g status-style \"bg={surface},fg={text}\""
 ```
+
+A port that changes a target's format or strategy takes out what the old one wrote
+before applying, with the editor state recorded.
 
 A block target with keys writes one `key_line` per key after the template, for configs
 that bind as `key action` lines:
@@ -151,8 +156,12 @@ or with `integer_version = true` the first number (`less 710` is 710.0.0).
 Ports always lag releases, so being outside a range is not worth a warning by itself.
 A tool crossing into another port plans as `update`, because the port version differs.
 
+`refresh_args` run against the tool's binary after apply and revert, found in the
+scan dirs, for a tool that reads config through a cache (`bat cache --build`). A failed
+refresh warns: the files are already right.
+
 `port.toml` is checked on load: `paths` stay in
-config locations and `version_args` are plain words. Neither replaces review: a
+config locations, and `version_args` and `refresh_args` are plain words. Neither replaces review: a
 config can run commands, and that is only visible by reading the port.
 
 ### Key notation
@@ -169,6 +178,7 @@ A key the notation cannot express skips that binding with a warning.
 | --------- | -------------------------------------------- | ------------------------------ |
 | `edit`    | Owned key paths in place, via format editor  | Restore owned keys             |
 | `block`   | Region between `# >>> vimify >>>` markers    | Remove block                   |
+| `file`    | Whole file from the template, for a file only vimify writes where markers cannot come first (XML declaration) | Restore backup or delete, edits included |
 | `include` | Not implemented: only for a tool `edit` and `block` cannot reach ([stack.md](stack.md#tool-config-editing)) | |
 
 Format editors share one trait so `yaml-edit` stays swappable

@@ -1,3 +1,4 @@
 # My bat setup
 --style="numbers"
+--theme="Catppuccin Frappe"
 --paging=never

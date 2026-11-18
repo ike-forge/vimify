@@ -608,23 +608,27 @@ test_btop_shows_the_palette() {
   close
 }
 
-test_bat_uses_the_terminal_palette() {
+test_bat_uses_the_palette_theme() {
   reset
   mkdir -p ~/.config/bat
-  printf -- '--paging=never\n' >~/.config/bat/config
+  printf -- '--theme=TwoDark\n--paging=never\n' >~/.config/bat/config
   cp ~/.config/bat/config /tmp/original
   apply
-  in_file ~/.config/bat/config '--theme="ansi"'
+  in_file ~/.config/bat/config '--theme="vimify"'
+  [ "$(grep -c -- --theme ~/.config/bat/config)" = 1 ] || fail 'the old --theme is still in the bat config'
   printf 'fn main() {}\n' >/tmp/demo.rs
   local out
-  out=$(batcat --color=always --decorations=never /tmp/demo.rs)
+  out=$(batcat --color=always --decorations=never /tmp/demo.rs 2>&1)
+  # Frappe's mauve, the palette's special role, on the keyword.
   case "$out" in
-    *'38;2;'*) fail 'bat still uses a truecolor theme' ;;
-    *$'\e[3'*) ;;
-    *) fail 'bat printed no colour' ;;
+    *'38;2;202;158;230mfn'*) ;;
+    *) fail "bat does not colour with the vimify theme: $out" ;;
   esac
   revert
   is_original ~/.config/bat/config
+  [ ! -e ~/.config/bat/themes/vimify.tmTheme ] || fail 'the vimify theme is still there'
+  batcat --list-themes --color=never | grep -qx vimify && fail 'the bat cache still has the vimify theme'
+  return 0
 }
 
 test_less_honours_what_vimify_wrote() {

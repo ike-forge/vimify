@@ -106,11 +106,13 @@ fn execute(
 ) -> Result<()> {
     let palette = palette::load(&reference.theme)?;
     let hash = reference.hash()?;
+    let dirs = scan_dirs(reference);
     let cx = apply::Context {
         ports,
         reference,
         palette: &palette,
         reference_hash: &hash,
+        scan_dirs: &dirs,
     };
     let reports = apply::execute(ops, &cx, state, &mut state::save);
     let mut failed = 0;

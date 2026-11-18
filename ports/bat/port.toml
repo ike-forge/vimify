@@ -1,13 +1,246 @@
 schema = 1
-version = "0.1.0"
+version = "0.3.0"
 # Debian and Ubuntu ship the binary as batcat.
 binaries = ["bat", "batcat"]
 versions = ">=0.25"
+# bat reads themes from its cache, not from themes/.
+refresh_args = ["cache", "--build"]
 
-notes = "Theme only: bat has no keybindings. Output longer than a screen pages through less, so its keys are less's. The less port rebinds them. Syntax colours follow the terminal's palette: bat ships no Catppuccin theme, and a custom one needs `bat cache --build`."
+notes = "Theme only: bat has no keybindings. Output longer than a screen pages through less, so its keys are less's. The less port rebinds them. Writes the palette as a vimify syntax theme and selects it, replacing any `--theme` in the config. Rebuilds bat's cache after apply and revert, which also picks up other themes and syntaxes in bat's config directory."
 
 [[target]]
-format = "lines"
-strategy = "block"
+format = "args"
+strategy = "edit"
 paths = ["$BAT_CONFIG_PATH", "$XDG_CONFIG_HOME/bat/config"]
-template = '--theme="ansi"'
+
+[target.theme]
+"--theme" = '"vimify"'
+
+[[target]]
+format = "xml"
+strategy = "file"
+paths = ["$BAT_CONFIG_DIR/themes/vimify.tmTheme", "$XDG_CONFIG_HOME/bat/themes/vimify.tmTheme"]
+template = '''
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>name</key>
+  <string>vimify</string>
+  <key>settings</key>
+  <array>
+    <dict>
+      <key>settings</key>
+      <dict>
+        <key>background</key>
+        <string>{base}</string>
+        <key>foreground</key>
+        <string>{text}</string>
+        <key>caret</key>
+        <string>{text}</string>
+        <key>selection</key>
+        <string>{selection}</string>
+        <key>lineHighlight</key>
+        <string>{surface}</string>
+        <key>gutterForeground</key>
+        <string>{muted}</string>
+        <key>findHighlight</key>
+        <string>{warning}</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>
+      <string>Comment</string>
+      <key>scope</key>
+      <string>comment</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>{muted}</string>
+        <key>fontStyle</key>
+        <string>italic</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>
+      <string>String</string>
+      <key>scope</key>
+      <string>string</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>{success}</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>
+      <string>Number, constant</string>
+      <key>scope</key>
+      <string>constant.numeric, constant.language, constant.character</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>{warning}</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>
+      <string>Keyword</string>
+      <key>scope</key>
+      <string>keyword, storage</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>{special}</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>
+      <string>Operator</string>
+      <key>scope</key>
+      <string>keyword.operator</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>{info}</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>
+      <string>Function</string>
+      <key>scope</key>
+      <string>entity.name.function, support.function, meta.function-call</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>{accent}</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>
+      <string>Type</string>
+      <key>scope</key>
+      <string>entity.name.type, entity.name.class, support.type, support.class</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>{info}</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>
+      <string>Tag</string>
+      <key>scope</key>
+      <string>entity.name.tag</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>{accent}</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>
+      <string>Attribute</string>
+      <key>scope</key>
+      <string>entity.other.attribute-name</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>{warning}</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>
+      <string>Invalid</string>
+      <key>scope</key>
+      <string>invalid</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>{error}</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>
+      <string>Heading</string>
+      <key>scope</key>
+      <string>markup.heading</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>{accent}</string>
+        <key>fontStyle</key>
+        <string>bold</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>
+      <string>Bold</string>
+      <key>scope</key>
+      <string>markup.bold</string>
+      <key>settings</key>
+      <dict>
+        <key>fontStyle</key>
+        <string>bold</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>
+      <string>Italic</string>
+      <key>scope</key>
+      <string>markup.italic</string>
+      <key>settings</key>
+      <dict>
+        <key>fontStyle</key>
+        <string>italic</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>
+      <string>Link</string>
+      <key>scope</key>
+      <string>markup.underline.link</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>{info}</string>
+        <key>fontStyle</key>
+        <string>underline</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>
+      <string>Inserted</string>
+      <key>scope</key>
+      <string>markup.inserted</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>{success}</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>
+      <string>Deleted</string>
+      <key>scope</key>
+      <string>markup.deleted</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>{error}</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>
+      <string>Changed</string>
+      <key>scope</key>
+      <string>markup.changed</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key>
+        <string>{warning}</string>
+      </dict>
+    </dict>
+  </array>
+</dict>
+</plist>'''

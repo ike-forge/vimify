@@ -22,6 +22,8 @@ pub struct Port {
     pub versions: VersionReq,
     /// Arguments that print the tool's version.
     pub version_args: Vec<String>,
+    /// Run after apply and revert, for a tool that reads its config from a cache.
+    pub refresh_args: Vec<String>,
     /// The tool numbers releases with one integer (`less 710`), read as the major.
     pub integer_version: bool,
     /// One per file. Splitting a tool's config across files changes nothing else.
@@ -95,6 +97,9 @@ pub enum Format {
     Json,
     Ron,
     Lines,
+    /// Command-line flags, one per line.
+    Args,
+    Xml,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -102,6 +107,8 @@ pub enum Format {
 pub enum Strategy {
     Edit,
     Block,
+    /// The whole file is the template, for a file only vimify writes.
+    File,
     Include,
 }
 
@@ -156,6 +163,8 @@ struct PortFile {
     versions: Option<String>,
     #[serde(default = "default_version_args")]
     version_args: Vec<String>,
+    #[serde(default)]
+    refresh_args: Vec<String>,
     #[serde(default)]
     integer_version: bool,
     #[serde(default)]
@@ -244,6 +253,7 @@ pub fn parse(name: &str, text: &str) -> Result<Port> {
             .parse()
             .with_context(|| format!("port {name}: versions {versions}"))?,
         version_args: file.version_args,
+        refresh_args: file.refresh_args,
         integer_version: file.integer_version,
         targets: file.target,
         notes: file.notes,
@@ -298,19 +308,20 @@ fn validate_path(path: &str) -> Result<()> {
 }
 
 /// vimify runs these on the user's machine, so only plain words and flags pass.
-fn validate_version_args(args: &[String]) -> Result<()> {
+fn validate_args(field: &str, args: &[String]) -> Result<()> {
     let plain = |arg: &String| {
         !arg.is_empty() && arg.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
     };
     if args.len() > 3 || !args.iter().all(plain) {
-        bail!("version_args must be up to three plain words or flags");
+        bail!("{field} must be up to three plain words or flags");
     }
     Ok(())
 }
 
 /// Ports cannot define new actions or roles.
 fn validate(port: &Port) -> Result<()> {
-    validate_version_args(&port.version_args)?;
+    validate_args("version_args", &port.version_args)?;
+    validate_args("refresh_args", &port.refresh_args)?;
     port.targets.iter().try_for_each(validate_target)
 }
 
@@ -324,8 +335,12 @@ fn validate_target(target: &Target) -> Result<()> {
     if !target.keys.is_empty() && target.key_notation.is_none() {
         bail!("keys need a key_notation");
     }
-    if target.template.is_some() != (target.strategy == Strategy::Block) {
-        bail!("a template belongs to a block target, and a block target needs one");
+    let templated = matches!(target.strategy, Strategy::Block | Strategy::File);
+    if target.template.is_some() != templated {
+        bail!("a template belongs to a block or file target, and such a target needs one");
+    }
+    if target.strategy == Strategy::File && !(target.keys.is_empty() && target.theme.is_empty()) {
+        bail!("a file target is its template alone");
     }
     let block_keys = target.strategy == Strategy::Block && !target.keys.is_empty();
     if target.key_line.is_some() != block_keys {
@@ -497,7 +512,7 @@ mod tests {
     fn version_args_must_be_plain() {
         let plain = |args: &[&str]| {
             let args: Vec<String> = args.iter().map(|a| a.to_string()).collect();
-            validate_version_args(&args).is_ok()
+            validate_args("version_args", &args).is_ok()
         };
         assert!(plain(&["--version"]));
         assert!(plain(&["version", "-s"]));
@@ -535,6 +550,26 @@ mod tests {
     fn a_block_target_needs_a_template() {
         let text = YAML.replace("\"edit\"", "\"block\"");
         assert!(parse("x", &text).is_err());
+    }
+
+    #[test]
+    fn a_file_target_is_its_template_alone() {
+        let file = YAML.replace("\"edit\"", "\"file\"");
+        assert!(parse("x", &format!("{file}template = \"a\"\n")).is_ok());
+        assert!(parse("x", &file).is_err());
+        let text = format!("{file}template = \"a\"\n[target.theme]\nb = \"c\"\n");
+        let err = parse("x", &text).unwrap_err();
+        assert!(format!("{err:#}").contains("template alone"));
+    }
+
+    #[test]
+    fn refresh_args_must_be_plain() {
+        let text = YAML.replace(
+            "[[target]]",
+            "refresh_args = [\"-c\", \"rm x\"]\n[[target]]",
+        );
+        let err = parse("x", &format!("{text}[target.keys]\na = \"up\"\n")).unwrap_err();
+        assert!(format!("{err:#}").contains("refresh_args"));
     }
 
     #[test]

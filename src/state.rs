@@ -55,6 +55,10 @@ impl State {
                 match applied.files.iter_mut().find(|f| f.path == old.path) {
                     Some(file) => {
                         file.backup = old.backup.clone();
+                        // A changed editor means apply already took the old keys out.
+                        if (old.format, old.strategy) != (file.format, file.strategy) {
+                            continue;
+                        }
                         for (setting, value) in &old.owned {
                             file.owned
                                 .entry(setting.clone())

@@ -235,6 +235,7 @@ mod tests {
             binaries: vec![name.into()],
             versions: semver::VersionReq::STAR,
             version_args: vec![],
+            refresh_args: vec![],
             integer_version: false,
             targets: paths.map(target).into_iter().collect(),
             notes: None,
