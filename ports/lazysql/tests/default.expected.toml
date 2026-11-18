@@ -11,12 +11,14 @@ URL = '/home/dev/demo.db'
 Copy = "y" # my own binding
 Refresh = "r"
 Delete = "d"
+Search = "/"
 
 [keymap.Connection]
 DeleteConnection = "d"
 Quit = "q"
 
 [keymap.Home]
+HelpPopup = "?"
 Quit = "q"
 
 [keymap.JSONViewer]
@@ -26,6 +28,7 @@ Copy = "y"
 Copy = "y"
 Delete = "d"
 Quit = "q"
+Search = "/"
 
 [keymap.QueryPreview]
 Copy = "y"
@@ -34,12 +37,19 @@ Quit = "q"
 
 [keymap.Sidebar]
 Copy = "y"
+GotoEnd = "G"
+GotoStart = "g"
 MoveDown = "j"
 MoveUp = "k"
 
 [keymap.Tree]
+GotoBottom = "G"
+GotoTop = "g"
 MoveDown = "j"
 MoveUp = "k"
+PageNext = "Ctrl-D"
+PagePrev = "Ctrl-U"
+Search = "/"
 
 [theme.Colors]
 Title = "#8caaee"

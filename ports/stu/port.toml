@@ -1,9 +1,9 @@
 schema = 1
-version = "0.1.0"
+version = "0.2.0"
 binaries = ["stu"]
 versions = ">=0.7"
 
-notes = "Keys only: stu's colours are built in. A binding replaces stu's key, so copy details moves off r. delete is not mapped: stu cannot delete. quit is not mapped: stu quits on its quit key even while typing a filter, so q would quit mid-word."
+notes = "Keys only: stu's colours are built in. A binding replaces stu's key, so copy details moves off r, and pages move off ctrl+f and ctrl+b. delete is not mapped: stu cannot delete. quit is not mapped: stu quits on its quit key even while typing a filter, so q would quit mid-word."
 
 # The only location stu reads, besides $STU_ROOT_DIR. Each value replaces stu's own list.
 [[target]]
@@ -13,22 +13,39 @@ key_notation = "stu"
 paths = ["$STU_ROOT_DIR/keybindings.toml", "~/.stu/keybindings.toml"]
 
 [target.keys]
+"common.help" = "help"
 "bucket_list.down" = "down"
 "bucket_list.up" = "up"
 "bucket_list.copy_details" = "yank"
+"bucket_list.go_to_top" = "top"
+"bucket_list.go_to_bottom" = "bottom"
+"bucket_list.page_up" = "page_up"
+"bucket_list.page_down" = "page_down"
+"bucket_list.filter" = "search"
 "object_list.down" = "down"
 "object_list.up" = "up"
 "object_list.copy_details" = "yank"
+"object_list.go_to_top" = "top"
+"object_list.go_to_bottom" = "bottom"
+"object_list.page_up" = "page_up"
+"object_list.page_down" = "page_down"
+"object_list.filter" = "search"
 "object_detail.down" = "down"
 "object_detail.up" = "up"
 "object_detail.left" = "left"
 "object_detail.right" = "right"
 "object_detail.copy_details" = "yank"
+"object_detail.go_to_top" = "top"
+"object_detail.go_to_bottom" = "bottom"
 "object_preview.down" = "down"
 "object_preview.up" = "up"
 "object_preview.left" = "left"
 "object_preview.right" = "right"
 "object_preview.copy" = "yank"
+"object_preview.go_to_top" = "top"
+"object_preview.go_to_bottom" = "bottom"
+"object_preview.page_up" = "page_up"
+"object_preview.page_down" = "page_down"
 "select_dialog.down" = "down"
 "select_dialog.up" = "up"
 "select_dialog.left" = "left"

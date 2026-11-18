@@ -1,11 +1,11 @@
 schema = 1
-version = "0.1.0"
+version = "0.2.0"
 binaries = ["less"]
 # less 582 reads a lesskey source file; older ones need it compiled to ~/.less.
 versions = ">=582"
 integer_version = true
 
-notes = "Keys only, and for every program paging through less: bat, man, git. left and right scroll sideways; h no longer opens help, H still does. yank and delete do not apply. BusyBox less reads no lesskey file."
+notes = "Keys only, and for every program paging through less: bat, man, git. left and right scroll sideways; h no longer opens help, H still does. help is not mapped: ? is backward search, as in vim. yank and delete do not apply. BusyBox less reads no lesskey file."
 
 # Bindings in this file take precedence over less's built-in ones.
 [[target]]
@@ -27,3 +27,8 @@ back-line = "up"
 left-scroll = "left"
 right-scroll = "right"
 quit = "quit"
+goto-line = "top"
+goto-end = "bottom"
+back-scroll = "page_up"
+forw-scroll = "page_down"
+forw-search = "search"

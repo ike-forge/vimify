@@ -9,6 +9,13 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("yank", "y"),
     ("delete", "d"),
     ("quit", "q"),
+    // g, not vim's gg: most tools bind single keys only.
+    ("top", "g"),
+    ("bottom", "G"),
+    ("page_up", "<C-u>"),
+    ("page_down", "<C-d>"),
+    ("search", "/"),
+    ("help", "?"),
 ];
 
 pub fn is_action(name: &str) -> bool {

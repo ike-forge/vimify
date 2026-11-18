@@ -1,8 +1,8 @@
 schema = 1
-version = "0.2.0"
+version = "0.3.0"
 binaries = ["lazygit"]
 versions = ">=0.66"
-notes = "yank covers the file and commit copy keys; delete covers the shared remove key. quit replaces q and ctrl+c: lazygit has one slot for it."
+notes = "yank covers the file and commit copy keys; delete covers the shared remove key. quit replaces q and ctrl+c: lazygit has one slot for it. top and bottom stay on < and >: g and G already reset, pop stash and open pull requests. page_up and page_down scroll the main view. help opens the keybindings menu."
 
 [[target]]
 format = "yaml"
@@ -22,6 +22,10 @@ paths = [
 "keybinding.universal.nextBlock-alt" = "right"
 "keybinding.universal.remove" = "delete"
 "keybinding.universal.quit" = "quit"
+"keybinding.universal.scrollUpMain-alt2" = "page_up"
+"keybinding.universal.scrollDownMain-alt2" = "page_down"
+"keybinding.universal.startSearch" = "search"
+"keybinding.universal.optionMenu" = "help"
 "keybinding.files.copyFileInfoToClipboard" = "yank"
 "keybinding.commits.copyCommitAttributeToClipboard" = "yank"
 

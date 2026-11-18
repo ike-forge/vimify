@@ -123,7 +123,7 @@ impl ConfigScreen {
         .areas(frame.area());
 
         let fields = (0..fields).map(|i| {
-            let label = format!("{:8}", name(i)).dim();
+            let label = format!("{:10}", name(i)).dim();
             let shown = match &self.input {
                 Some(input) if i + 1 == self.cursor => {
                     return ListItem::new(Line::from(vec![
@@ -252,7 +252,7 @@ mod tests {
         let mut screen = ConfigScreen::new(Reference::default());
         press(&mut screen, "j");
         type_value(&mut screen, "nope");
-        let shown = draw(40, 24, |f| screen.render(f)).replace('\n', " ");
+        let shown = draw(80, 24, |f| screen.render(f)).replace('\n', " ");
         for name in palette::names() {
             assert!(shown.contains(name), "{name} missing from\n{shown}");
         }

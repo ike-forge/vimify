@@ -3,7 +3,12 @@ LESS = -R
 # >>> vimify >>>
 #command
 k back-line
+^U back-scroll
 j forw-line
+^D forw-scroll
+/ forw-search
+G goto-end
+g goto-line
 h left-scroll
 q quit
 l right-scroll

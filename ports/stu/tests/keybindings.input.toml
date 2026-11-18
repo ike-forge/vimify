@@ -1,6 +1,6 @@
 # My stu keys
 [common]
-help = ["?", "f1"] # mine
+quit = ["ctrl-c"] # mine
 
 [object_list]
 back = ["backspace", "h"]

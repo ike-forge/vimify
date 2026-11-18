@@ -148,10 +148,14 @@ keybinding:
   universal:
     nextItem-alt: j # my own binding
     nextBlock-alt: l
+    optionMenu: '?'
     prevBlock-alt: h
     prevItem-alt: k
     quit: q
     remove: d
+    scrollDownMain-alt2: '<c-d>'
+    scrollUpMain-alt2: '<c-u>'
+    startSearch: /
   commits:
     copyCommitAttributeToClipboard: y
   files:
@@ -622,7 +626,8 @@ test_bat_uses_the_terminal_palette() {
 test_less_honours_what_vimify_wrote() {
   reset
   mkdir -p ~/.config/vimify
-  printf '[keys]\ndown = "m"\n' >"$REFERENCE"
+  # less binds K to back-line, so only the config can make it jump to the end.
+  printf '[keys]\ndown = "m"\nbottom = "K"\n' >"$REFERENCE"
   apply
   in_file ~/.config/lesskey 'm forw-line'
   for i in $(seq -w 1 99); do printf 'line%s %0300d\n' "$i" 0; done >/tmp/long.txt
@@ -640,6 +645,10 @@ test_less_honours_what_vimify_wrote() {
   tmux -u send-keys -t app h
   wait_for '^line03' || return
   off_screen 'SUMMARY OF LESS COMMANDS'
+  tmux -u send-keys -t app K
+  wait_for '^line99' || return
+  tmux -u send-keys -t app g
+  wait_for '^line01' || return
   tmux -u send-keys -t app q
   wait_for 'EXIT=0'
   close

@@ -1,9 +1,9 @@
 schema = 1
-version = "0.2.0"
+version = "0.3.0"
 binaries = ["lfk"]
 versions = ">=0.19"
 
-notes = "quit stays on q: lfk hardcodes it. Diff moves from d to D, which delete frees."
+notes = "quit, top, bottom and paging stay on q, g, G, ctrl+u and ctrl+d: lfk hardcodes them. help takes the keymaps panel, ? by default. Diff moves from d to D, which delete frees."
 
 [[target]]
 format = "yaml"
@@ -19,6 +19,8 @@ paths = ["$LFK_CONFIG_DIR/config.yaml", "$XDG_CONFIG_HOME/lfk/config.yaml"]
 "keybindings.right" = "right"
 "keybindings.copy_name" = "yank"
 "keybindings.delete" = "delete"
+"keybindings.search" = "search"
+"keybindings.which_key_leader" = "help"
 
 [target.theme]
 # Diff defaults to d, the default delete key.

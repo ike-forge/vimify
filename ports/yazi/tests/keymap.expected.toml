@@ -2,9 +2,13 @@
 [mgr]
 prepend_keymap = [
 	{ on = "x", run = "mine", desc = "Mine" },
+	{ run = "arrow -50%", on = "<C-u>" },
+	{ run = "arrow 50%", on = "<C-d>" },
+	{ run = "arrow bot", on = "G" },
 	{ run = "arrow next", on = "j" },
 	{ run = "arrow prev", on = "k" },
 	{ run = "enter", on = "l" },
+	{ run = "find --smart", on = "/" },
 	{ run = "leave", on = "h" },
 	{ run = "quit", on = "q" },
 	{ run = "remove", on = "d" },

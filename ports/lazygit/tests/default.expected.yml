@@ -32,9 +32,13 @@ keybinding:
     nextItem: n
     nextBlock-alt: l
     nextItem-alt: j
+    optionMenu: '?'
     prevBlock-alt: h
     prevItem-alt: k
     remove: d
+    scrollDownMain-alt2: '<c-d>'
+    scrollUpMain-alt2: '<c-u>'
+    startSearch: /
   commits:
     copyCommitAttributeToClipboard: y
   files:

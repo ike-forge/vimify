@@ -1,9 +1,9 @@
 schema = 1
-version = "0.2.0"
+version = "0.3.0"
 binaries = ["yazi"]
 versions = ">=26.9"
 
-notes = "Keys cover the file list only; the task, preview and input layers keep their own. A keymap written as [[mgr.prepend_keymap]] tables is refused: use the inline array."
+notes = "top stays on gg: g is yazi's goto prefix. help is not mapped: ? is find previous, as in vim. Keys cover the file list only; the task, preview and input layers keep their own. A keymap written as [[mgr.prepend_keymap]] tables is refused: use the inline array."
 
 # prepend_keymap, not keymap: that replaces yazi's defaults, which must keep working.
 [[target]]
@@ -20,6 +20,10 @@ paths = ["$YAZI_CONFIG_HOME/keymap.toml", "$XDG_CONFIG_HOME/yazi/keymap.toml"]
 "mgr.prepend_keymap[run=yank].on" = "yank"
 "mgr.prepend_keymap[run=remove].on" = "delete"
 "mgr.prepend_keymap[run=quit].on" = "quit"
+"mgr.prepend_keymap[run=arrow bot].on" = "bottom"
+"mgr.prepend_keymap[run=arrow -50%].on" = "page_up"
+"mgr.prepend_keymap[run=arrow 50%].on" = "page_down"
+"mgr.prepend_keymap[run=find --smart].on" = "search"
 
 [[target]]
 format = "toml"

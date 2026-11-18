@@ -1,8 +1,8 @@
 schema = 1
-version = "0.2.0"
+version = "0.3.0"
 binaries = ["lazysql"]
 versions = ">=0.7"
-notes = "left and right are not mapped: H and L switch panes, and h and l move between cells."
+notes = "left and right are not mapped: H and L switch panes, and h and l move between cells. page_up and page_down page the tree; the table keeps < and > for result pages."
 
 [[target]]
 format = "toml"
@@ -15,6 +15,16 @@ paths = ["$XDG_CONFIG_HOME/lazysql/config.toml"]
 [target.keys]
 "keymap.Tree.MoveDown" = "down"
 "keymap.Tree.MoveUp" = "up"
+"keymap.Tree.GotoTop" = "top"
+"keymap.Tree.GotoBottom" = "bottom"
+"keymap.Tree.PagePrev" = "page_up"
+"keymap.Tree.PageNext" = "page_down"
+"keymap.Tree.Search" = "search"
+"keymap.Table.Search" = "search"
+"keymap.QueryHistory.Search" = "search"
+"keymap.Sidebar.GotoStart" = "top"
+"keymap.Sidebar.GotoEnd" = "bottom"
+"keymap.Home.HelpPopup" = "help"
 "keymap.Sidebar.MoveDown" = "down"
 "keymap.Sidebar.MoveUp" = "up"
 "keymap.Table.Copy" = "yank"

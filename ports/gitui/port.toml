@@ -1,8 +1,8 @@
 schema = 1
-version = "0.2.0"
+version = "0.3.0"
 binaries = ["gitui"]
 versions = ">=0.28"
-notes = "gitui binds one key per move, so the arrow keys stop moving. Help moves from h to ?, since h is left. delete takes discard, reset lines, drop stash and delete branch or tag, each confirmed first."
+notes = "gitui binds one key per move, so the arrow keys, Home, End, PageUp and PageDown stop moving. Help moves from h to ?, since h is left. delete takes discard, reset lines, drop stash and delete branch or tag, each confirmed first. search takes the file, branch and log find keys."
 
 [[target]]
 format = "ron"
@@ -25,10 +25,14 @@ stash_drop = "delete"
 delete_branch = "delete"
 delete_tag = "delete"
 quit = "quit"
-
-# gitui's help is on h, which left takes.
-[target.theme]
-open_help = "Some(( code: Char('?'), modifiers: \"\"))"
+home = "top"
+end = "bottom"
+page_up = "page_up"
+page_down = "page_down"
+file_find = "search"
+branch_find = "search"
+log_find = "search"
+open_help = "help"
 
 [[target]]
 format = "ron"

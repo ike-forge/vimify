@@ -61,6 +61,12 @@ right = "l"
 yank = "y"
 delete = "d"
 quit = "q"
+top = "g"
+bottom = "G"
+page_up = "<C-u>"
+page_down = "<C-d>"
+search = "/"
+help = "?"
 
 [scan]
 extra_paths = ["~/tools/bin"]

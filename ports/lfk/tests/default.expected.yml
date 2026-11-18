@@ -22,5 +22,7 @@ keybindings:
   down: j
   left: h
   right: l
+  search: /
   up: k
+  which_key_leader: '?'
   diff: D

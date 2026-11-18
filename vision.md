@@ -49,6 +49,12 @@ right = "l"
 yank = "y"
 delete = "d"
 quit = "q"
+top = "g"
+bottom = "G"
+page_up = "<C-u>"
+page_down = "<C-d>"
+search = "/"
+help = "?"
 ```
 
 The reference config, and optionally the generated tool configs, are meant to be
