@@ -259,8 +259,8 @@ test_config_saves_edits_for_apply() {
   apply
   start config
   wait_for 'Save changes' || return
-  # Row 3 is down; clear j, type m, then save from the top row.
-  tmux -u send-keys -t app j j j Enter BSpace m Enter g Enter
+  # Row 4 is down, below Save and Reset; clear j, type m, then save from the top row.
+  tmux -u send-keys -t app j j j j Enter BSpace m Enter g Enter
   wait_for 'EXIT=' && close_after_read
   in_output 'vimify apply'
   in_file "$REFERENCE" 'down = "m"'
