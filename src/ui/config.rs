@@ -13,7 +13,7 @@ use crate::{actions, palette};
 pub struct ConfigScreen {
     original: Reference,
     reference: Reference,
-    /// Row 0 is `Save changes`, row 1 the theme, then one row per action.
+    /// Rows are the buttons, then the theme, then one row per action.
     cursor: usize,
     input: Option<String>,
     error: Option<String>,
@@ -56,15 +56,21 @@ impl ConfigScreen {
             }
             return false;
         }
-        let last = actions::DEFAULTS.len() + 1;
+        let last = FIRST_FIELD + actions::DEFAULTS.len();
         match key {
             KeyCode::Char('j') | KeyCode::Down => self.cursor = (self.cursor + 1).min(last),
             KeyCode::Char('k') | KeyCode::Up => self.cursor = self.cursor.saturating_sub(1),
             KeyCode::Char('g') | KeyCode::Home => self.cursor = 0,
             KeyCode::Char('G') | KeyCode::End => self.cursor = last,
-            KeyCode::Enter if self.cursor == 0 => return true,
+            KeyCode::Enter if self.cursor == SAVE => return true,
+            KeyCode::Enter if self.cursor == RESET => {
+                let defaults = Reference::default();
+                self.reference.theme = defaults.theme;
+                self.reference.keys = defaults.keys;
+                self.error = None;
+            }
             KeyCode::Enter => {
-                self.input = Some(value(&self.reference, self.cursor - 1).to_owned());
+                self.input = Some(value(&self.reference, self.cursor - FIRST_FIELD).to_owned());
                 self.error = None;
             }
             _ => {}
@@ -78,7 +84,7 @@ impl ConfigScreen {
             return;
         };
         let text = input.trim().to_owned();
-        let field = self.cursor - 1;
+        let field = self.cursor - FIRST_FIELD;
         let check = if field == 0 {
             if palette::names().contains(&text.as_str()) {
                 Ok(())
@@ -115,7 +121,7 @@ impl ConfigScreen {
         let fields = actions::DEFAULTS.len() + 1;
         let [title, list, error, footer] = Layout::vertical([
             Constraint::Length(2),
-            Constraint::Length(fields as u16 + 1),
+            Constraint::Length((FIRST_FIELD + fields) as u16),
             Constraint::Fill(1),
             Constraint::Length(1),
         ])
@@ -125,7 +131,7 @@ impl ConfigScreen {
         let fields = (0..fields).map(|i| {
             let label = format!("{:10}", name(i)).dim();
             let shown = match &self.input {
-                Some(input) if i + 1 == self.cursor => {
+                Some(input) if i + FIRST_FIELD == self.cursor => {
                     return ListItem::new(Line::from(vec![
                         label,
                         input.clone().into(),
@@ -141,9 +147,11 @@ impl ConfigScreen {
             };
             ListItem::new(Line::from(vec![label, value]))
         });
-        let items = std::iter::once(ListItem::new(Line::from(" Save changes ".reversed())))
-            .chain(fields)
-            .collect();
+        let buttons = [
+            ListItem::new(Line::from(" Save changes ".reversed())),
+            ListItem::new(Line::from(" Reset to defaults ")),
+        ];
+        let items = buttons.into_iter().chain(fields).collect();
         let mut state = ListState::default().with_selected(Some(self.cursor));
 
         frame.render_widget(Line::from(vec!["vimify".bold(), " config".into()]), title);
@@ -162,6 +170,11 @@ impl ConfigScreen {
         frame.render_widget(Line::from(hint).dim(), footer);
     }
 }
+
+const SAVE: usize = 0;
+/// Unsaved like any edit, so `q` still backs out of it.
+const RESET: usize = 1;
+const FIRST_FIELD: usize = 2;
 
 /// `field` 0 is the theme, then one per action.
 fn name(field: usize) -> &'static str {
@@ -205,7 +218,7 @@ mod tests {
     fn enter_saves_on_the_button_and_edits_elsewhere() {
         let mut screen = ConfigScreen::new(Reference::default());
         assert!(screen.handle(KeyCode::Enter));
-        press(&mut screen, "j");
+        press(&mut screen, "jj");
         assert!(!screen.handle(KeyCode::Enter));
         assert!(screen.editing());
     }
@@ -213,7 +226,7 @@ mod tests {
     #[test]
     fn edits_a_key() {
         let mut screen = ConfigScreen::new(Reference::default());
-        press(&mut screen, "jjj");
+        press(&mut screen, "jjjj");
         type_value(&mut screen, "<C-n>");
         assert!(!screen.editing());
         assert_eq!(screen.reference().keys["down"], "<C-n>");
@@ -222,7 +235,7 @@ mod tests {
     #[test]
     fn edits_the_theme() {
         let mut screen = ConfigScreen::new(Reference::default());
-        press(&mut screen, "j");
+        press(&mut screen, "jj");
         type_value(&mut screen, "solarized-dark");
         assert_eq!(screen.reference().theme, "solarized-dark");
         assert!(draw(80, 20, |f| screen.render(f)).contains("solarized-dark *"));
@@ -231,7 +244,7 @@ mod tests {
     #[test]
     fn invalid_key_keeps_the_input_open() {
         let mut screen = ConfigScreen::new(Reference::default());
-        press(&mut screen, "jj");
+        press(&mut screen, "jjj");
         type_value(&mut screen, "ab");
         assert!(screen.editing());
         assert!(screen.error.is_some());
@@ -241,7 +254,7 @@ mod tests {
     #[test]
     fn unknown_theme_is_rejected() {
         let mut screen = ConfigScreen::new(Reference::default());
-        press(&mut screen, "j");
+        press(&mut screen, "jj");
         type_value(&mut screen, "nope");
         assert!(screen.editing());
         assert_eq!(screen.reference().theme, Reference::default().theme);
@@ -250,7 +263,7 @@ mod tests {
     #[test]
     fn unknown_theme_lists_every_theme() {
         let mut screen = ConfigScreen::new(Reference::default());
-        press(&mut screen, "j");
+        press(&mut screen, "jj");
         type_value(&mut screen, "nope");
         let shown = draw(80, 24, |f| screen.render(f)).replace('\n', " ");
         for name in palette::names() {
@@ -261,7 +274,7 @@ mod tests {
     #[test]
     fn esc_discards_the_input() {
         let mut screen = ConfigScreen::new(Reference::default());
-        press(&mut screen, "jjj");
+        press(&mut screen, "jjjj");
         screen.handle(KeyCode::Enter);
         press(&mut screen, "q");
         screen.handle(KeyCode::Esc);
@@ -270,11 +283,26 @@ mod tests {
     }
 
     #[test]
+    fn reset_restores_defaults_unsaved() {
+        let mut edited = Reference {
+            theme: "solarized-dark".into(),
+            ..Reference::default()
+        };
+        edited.keys.insert("down".into(), "n".into());
+        let mut screen = ConfigScreen::new(edited);
+        press(&mut screen, "j");
+        assert!(!screen.handle(KeyCode::Enter));
+        assert_eq!(screen.reference().theme, Reference::default().theme);
+        assert_eq!(screen.reference().keys, Reference::default().keys);
+        assert!(draw(80, 20, |f| screen.render(f)).contains("j *"));
+    }
+
+    #[test]
     fn typing_does_not_move_the_cursor() {
         let mut screen = ConfigScreen::new(Reference::default());
-        press(&mut screen, "j");
+        press(&mut screen, "jj");
         screen.handle(KeyCode::Enter);
         press(&mut screen, "jjj");
-        assert_eq!(screen.cursor, 1);
+        assert_eq!(screen.cursor, FIRST_FIELD);
     }
 }

@@ -17,7 +17,7 @@
 | Command           | Does                                                              |
 | ----------------- | ----------------------------------------------------------------- |
 | `vimify`          | Prints help                                                       |
-| `vimify config`   | Edits theme and keys. Saves only; applied tools plan as `update` on the next apply |
+| `vimify config`   | Edits theme and keys. Saves only; applied tools plan as `update` on the next apply. Reset to defaults is an unsaved edit; saving removes defaulted settings from the file, so later default changes reach the user |
 | `vimify apply`    | The flow below                                                    |
 | `vimify apply -y` | No UI: scan, take the select screen's initial checks, execute. Fails without a config file, on an invalid one, or without `exclusions` (`[]` opts in to every tool). An unknown tool in `exclusions` is invalid. Leaves `exclusions` as saved |
 | `vimify rollback` | Lists applied tools, all unchecked; checked ones revert through confirm and execute, and join `exclusions`. No scan: revert needs only state |

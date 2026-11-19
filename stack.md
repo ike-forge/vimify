@@ -82,6 +82,7 @@ $ vimify apply
 $ vimify config
 
  › Save changes
+   Reset to defaults
    theme   catppuccin-frappe
    left    h
    down    n *

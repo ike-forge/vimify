@@ -126,7 +126,8 @@ pub fn save_exclusions(exclusions: &[String]) -> Result<()> {
 }
 
 /// Writes only the theme and keys that differ from `before`, so defaults the user
-/// never set stay out of the file.
+/// never set stay out of the file. A change back to a default removes the setting,
+/// so the user follows later changes to the defaults.
 pub fn save_settings(before: &Reference, after: &Reference) -> Result<()> {
     update(|text| with_settings(text, before, after))
 }
@@ -158,10 +159,21 @@ fn with_exclusions(text: &str, exclusions: &[String]) -> Result<String> {
 fn with_settings(text: &str, before: &Reference, after: &Reference) -> Result<String> {
     let mut doc: DocumentMut = text.parse()?;
     if after.theme != before.theme {
-        doc["theme"] = value(after.theme.as_str());
+        if after.theme == DEFAULT_THEME {
+            doc.remove("theme");
+        } else {
+            doc["theme"] = value(after.theme.as_str());
+        }
     }
+    let defaults = default_keys();
     for (action, key) in &after.keys {
         if before.keys.get(action) == Some(key) {
+            continue;
+        }
+        if defaults.get(action) == Some(key) {
+            if let Some(keys) = doc.get_mut("keys").and_then(|k| k.as_table_like_mut()) {
+                keys.remove(action);
+            }
             continue;
         }
         let keys = doc
@@ -321,6 +333,16 @@ mod tests {
             out,
             "exclusions = []\ntheme = \"other\"\n\n[keys]\nquit = \"Q\"\n"
         );
+    }
+
+    #[test]
+    fn settings_back_to_defaults_are_removed() {
+        let text = "theme = \"other\"\n\n[keys]\ndown = \"n\"\nup = \"i\" # mine\n";
+        let out = edited(text, |r| {
+            r.theme = DEFAULT_THEME.into();
+            r.keys.insert("down".into(), "j".into());
+        });
+        assert_eq!(out, "\n[keys]\nup = \"i\" # mine\n");
     }
 
     #[test]
