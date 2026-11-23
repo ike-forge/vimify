@@ -176,12 +176,19 @@ fn apply_tool(
     let mut warnings = Vec::new();
     for file in &pending {
         // A first apply always backs up: state with no backup means vimify created the
-        // file, and revert would delete it.
+        // file, and revert would delete it. A file vimify wrote and nobody touched since
+        // holds nothing of the user's.
         let changed = file.existing.as_deref() != Some(&file.output.text);
-        let known = |a: &Applied| a.files.iter().any(|f| f.path == file.path);
-        let first_apply = !previous.as_ref().is_some_and(known);
-        let backup = match file.existing {
-            Some(_) if changed || first_apply => Some(backup::backup(file.path)?),
+        let recorded = previous
+            .iter()
+            .flat_map(|a| &a.files)
+            .find(|f| f.path == file.path);
+        let untouched =
+            |text: &str| recorded.is_some_and(|f| state::hash(text.as_bytes()) == f.file_hash);
+        let backup = match file.existing.as_deref() {
+            Some(text) if recorded.is_none() || (changed && !untouched(text)) => {
+                Some(backup::backup(file.path)?)
+            }
             _ => None,
         };
         files.push(AppliedFile {
@@ -238,15 +245,16 @@ fn write_all(pending: &[Pending]) -> Result<()> {
 /// One file of a revert, computed before any file is touched.
 struct Restore<'a> {
     path: &'a Path,
-    exists: bool,
+    /// Exists and differs from what vimify wrote.
+    edited: bool,
     /// `None` deletes the file.
     text: Option<String>,
     /// Mode of the backup, for a byte-for-byte restore.
     permissions: Option<fs::Permissions>,
 }
 
-/// Takes vimify's keys back out. The current files are backed up first, so nothing the
-/// revert overrides is lost.
+/// Takes vimify's keys back out. A file edited since apply is backed up first, so
+/// nothing the revert overrides is lost.
 fn revert_tool(
     tool: &str,
     state: &mut State,
@@ -264,7 +272,7 @@ fn revert_tool(
         .collect::<Result<Vec<_>>>()?;
 
     for restore in &restores {
-        if restore.exists {
+        if restore.edited {
             backup::backup(restore.path)?;
         }
         let path = restore.path;
@@ -307,10 +315,10 @@ fn prepare_restore(file: &AppliedFile) -> Result<Restore<'_>> {
     // Only an edited file needs key-by-key: the backup restores anything else byte for
     // byte, which rewriting keys cannot promise.
     // A file target has no keys around vimify's to keep; revert backs up the edits.
-    let edited = current
+    let changed = current
         .as_ref()
-        .filter(|text| state::hash(text.as_bytes()) != file.file_hash)
-        .filter(|_| file.strategy != Strategy::File);
+        .filter(|text| state::hash(text.as_bytes()) != file.file_hash);
+    let edited = changed.filter(|_| file.strategy != Strategy::File);
     let (text, permissions) = match (edited, original) {
         (Some(text), original) => {
             let source = original.as_ref().map_or("", |(text, _)| text);
@@ -323,7 +331,7 @@ fn prepare_restore(file: &AppliedFile) -> Result<Restore<'_>> {
     };
     Ok(Restore {
         path,
-        exists: current.is_some(),
+        edited: changed.is_some(),
         text,
         permissions,
     })
@@ -526,7 +534,41 @@ mod tests {
         );
         assert_eq!(fx.state.tools["t"].reference_hash, "new");
         assert_eq!(fs::read_to_string(bak(&path, ".bak")).unwrap(), "b: 1\n");
-        assert!(bak(&path, ".bak.1").exists());
+        assert!(!bak(&path, ".bak.1").exists());
+    }
+
+    #[test]
+    fn update_of_an_edited_file_backs_up_the_edits() {
+        let dir = TempDir::new().unwrap();
+        let path = config(&dir, "b: 1\n");
+        let mut fx = Fixture::new();
+        fx.run(
+            Action::Apply {
+                paths: vec![path.clone()],
+            },
+            "ref",
+        )
+        .unwrap();
+        fs::write(&path, "b: 2\na:\n  down: j\n").unwrap();
+
+        fx.reference.keys.insert("down".into(), "n".into());
+        fx.run(
+            Action::Update {
+                paths: vec![path.clone()],
+                manual: true,
+            },
+            "new",
+        )
+        .unwrap();
+
+        assert_eq!(
+            fs::read_to_string(bak(&path, ".bak.1")).unwrap(),
+            "b: 2\na:\n  down: j\n"
+        );
+        assert_eq!(
+            fx.state.tools["t"].files[0].backup,
+            Some(bak(&path, ".bak"))
+        );
     }
 
     #[test]
@@ -716,6 +758,31 @@ mod tests {
         assert_eq!(fs::read_to_string(&path).unwrap(), "# mine\nb: 1\n");
         assert!(fx.state.tools.is_empty());
         assert!(bak(&path, ".bak").exists());
+        assert!(!bak(&path, ".bak.1").exists());
+    }
+
+    #[test]
+    fn apply_revert_cycles_keep_one_backup() {
+        let dir = TempDir::new().unwrap();
+        let path = config(&dir, "b: 1\n");
+        let mut fx = Fixture::new();
+        for _ in 0..2 {
+            fx.run(
+                Action::Apply {
+                    paths: vec![path.clone()],
+                },
+                "ref",
+            )
+            .unwrap();
+            assert_eq!(
+                fx.state.tools["t"].files[0].backup,
+                Some(bak(&path, ".bak"))
+            );
+            fx.run(revert(&path), "ref").unwrap();
+        }
+
+        assert_eq!(fs::read_to_string(&path).unwrap(), "b: 1\n");
+        assert!(!bak(&path, ".bak.1").exists());
     }
 
     #[test]
@@ -847,6 +914,10 @@ mod tests {
         fx.run(revert(&path), "ref").unwrap();
 
         assert_eq!(fs::read_to_string(&path).unwrap(), "mine: 1\n");
+        assert_eq!(
+            fs::read_to_string(bak(&path, ".bak")).unwrap(),
+            "a:\n  down: j\nmine: 1\n"
+        );
     }
 
     #[test]
@@ -903,7 +974,7 @@ mod tests {
     }
 
     #[test]
-    fn revert_deletes_a_created_file_and_keeps_a_copy() {
+    fn revert_deletes_an_untouched_created_file_without_a_copy() {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("config.yml");
         let mut fx = Fixture::new();
@@ -918,10 +989,7 @@ mod tests {
         fx.run(revert(&path), "ref").unwrap();
 
         assert!(!path.exists());
-        assert_eq!(
-            fs::read_to_string(bak(&path, ".bak")).unwrap(),
-            "a:\n  down: j\n"
-        );
+        assert!(!bak(&path, ".bak").exists());
         assert!(fx.state.tools.is_empty());
     }
 

@@ -1,12 +1,13 @@
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::{self, File, OpenOptions, Permissions};
-use std::io;
-use std::os::unix::fs::OpenOptionsExt;
+use std::io::{self, Read, Write};
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
-/// Copies `path` to the first free of `<path>.bak`, `<path>.bak.1`, ... and returns it.
+/// Returns a backup of `path`: an existing `<path>.bak*` with the same bytes and mode,
+/// else a copy at the first free of `<path>.bak`, `<path>.bak.1`, ...
 /// A symlink's target supplies the content; the backup sits next to the link, where
 /// the tool reads its config, not in the dotfiles repo.
 pub fn backup(path: &Path) -> Result<PathBuf> {
@@ -17,8 +18,14 @@ pub fn backup(path: &Path) -> Result<PathBuf> {
     if !meta.is_file() {
         bail!("{} is not a file", path.display());
     }
+    let mut bytes = Vec::new();
+    src.read_to_end(&mut bytes)
+        .with_context(|| format!("{}", path.display()))?;
+    if let Some(same) = find_same(path, &bytes, &meta.permissions())? {
+        return Ok(same);
+    }
     let (dst_path, mut dst) = claim(path).with_context(|| format!("{}", path.display()))?;
-    if let Err(e) = copy(&mut src, &mut dst, meta.permissions()) {
+    if let Err(e) = copy(&bytes, &mut dst, meta.permissions()) {
         // A partial copy must not pass for a backup.
         let _ = fs::remove_file(&dst_path);
         return Err(e).with_context(|| format!("{}", dst_path.display()));
@@ -55,8 +62,60 @@ fn candidate(path: &Path, n: u32) -> PathBuf {
     name.into()
 }
 
-fn copy(src: &mut File, dst: &mut File, permissions: Permissions) -> io::Result<()> {
-    io::copy(src, dst)?;
+/// Lowest-numbered first, so repeated runs settle on the same file. Symlinks are
+/// skipped: their content can change without the name changing.
+fn find_same(path: &Path, bytes: &[u8], permissions: &Permissions) -> Result<Option<PathBuf>> {
+    let (Some(dir), Some(name)) = (path.parent(), path.file_name()) else {
+        return Ok(None);
+    };
+    let dir = if dir.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        dir
+    };
+    let mut numbers = Vec::new();
+    for entry in fs::read_dir(dir).with_context(|| format!("{}", dir.display()))? {
+        let entry = entry.with_context(|| format!("{}", dir.display()))?;
+        if let Some(n) = number(name, &entry.file_name()) {
+            numbers.push(n);
+        }
+    }
+    numbers.sort_unstable();
+    for n in numbers {
+        let candidate = candidate(path, n);
+        let meta =
+            fs::symlink_metadata(&candidate).with_context(|| format!("{}", candidate.display()))?;
+        let same_mode = meta.permissions().mode() & 0o7777 == permissions.mode() & 0o7777;
+        if meta.is_file() && meta.len() == bytes.len() as u64 && same_mode {
+            let existing =
+                fs::read(&candidate).with_context(|| format!("{}", candidate.display()))?;
+            if existing == bytes {
+                return Ok(Some(candidate));
+            }
+        }
+    }
+    Ok(None)
+}
+
+/// The `n` of `candidate(path, n)` for a backup name of `name`.
+fn number(name: &OsStr, entry: &OsStr) -> Option<u32> {
+    let rest = entry
+        .as_encoded_bytes()
+        .strip_prefix(name.as_encoded_bytes())?;
+    let rest = rest.strip_prefix(b".bak")?;
+    if rest.is_empty() {
+        return Some(0);
+    }
+    let digits = std::str::from_utf8(rest.strip_prefix(b".")?).ok()?;
+    // `.bak.01` is not a name vimify makes; `candidate` would not find it again.
+    match digits.parse::<u32>() {
+        Ok(n) if n > 0 && n.to_string() == digits => Some(n),
+        _ => None,
+    }
+}
+
+fn copy(bytes: &[u8], dst: &mut File, permissions: Permissions) -> io::Result<()> {
+    dst.write_all(bytes)?;
     dst.set_permissions(permissions)?;
     // The caller replaces the original next, so the copy must reach disk first.
     dst.sync_all()
@@ -104,6 +163,52 @@ mod tests {
         assert_eq!(out, sibling(&path, ".bak.1"));
         assert_eq!(fs::read_to_string(users).unwrap(), "user's own");
         assert_eq!(fs::read_to_string(out).unwrap(), "original");
+    }
+
+    #[test]
+    fn reuses_a_backup_with_the_same_content() {
+        let dir = TempDir::new().unwrap();
+        let path = config(&dir);
+        fs::write(sibling(&path, ".bak"), "other").unwrap();
+        fs::write(sibling(&path, ".bak.2"), "original").unwrap();
+        fs::write(sibling(&path, ".bak.5"), "original").unwrap();
+
+        assert_eq!(backup(&path).unwrap(), sibling(&path, ".bak.2"));
+        assert!(!sibling(&path, ".bak.1").exists());
+    }
+
+    #[test]
+    fn same_content_with_another_mode_is_not_reused() {
+        let dir = TempDir::new().unwrap();
+        let path = config(&dir);
+        let other = sibling(&path, ".bak");
+        fs::write(&other, "original").unwrap();
+        fs::set_permissions(&other, Permissions::from_mode(0o600)).unwrap();
+        fs::set_permissions(&path, Permissions::from_mode(0o644)).unwrap();
+
+        assert_eq!(backup(&path).unwrap(), sibling(&path, ".bak.1"));
+    }
+
+    #[test]
+    fn symlinked_backup_is_not_reused() {
+        let dir = TempDir::new().unwrap();
+        let path = config(&dir);
+        let elsewhere = dir.path().join("elsewhere");
+        fs::write(&elsewhere, "original").unwrap();
+        symlink(&elsewhere, sibling(&path, ".bak")).unwrap();
+
+        assert_eq!(backup(&path).unwrap(), sibling(&path, ".bak.1"));
+    }
+
+    #[test]
+    fn only_vimify_backup_names_are_reused() {
+        let dir = TempDir::new().unwrap();
+        let path = config(&dir);
+        for suffix in [".bak.01", ".bak.x", ".bak0", ".bakx"] {
+            fs::write(sibling(&path, suffix), "original").unwrap();
+        }
+
+        assert_eq!(backup(&path).unwrap(), sibling(&path, ".bak"));
     }
 
     #[test]

@@ -200,6 +200,9 @@ A block is an editor too, with its text as the one owned setting.
 - Before vimify modifies or deletes an existing file, it copies it to the first
   free name of `config.yml.bak`, `config.yml.bak.1`, `config.yml.bak.2`, ...
   An existing file is never overwritten, whoever created it.
+- Only the user's content is backed up. A file whose hash matches what vimify
+  last wrote gets no backup on update or revert. A `.bak*` with the same bytes
+  and mode is reused instead of copied, so apply/revert cycles keep one backup.
 - State keeps the backup from the first apply as the revert target, so revert
   restores the pre-vimify file however many re-applies happened since.
 - Creating a missing file needs no backup. State records none, and `edit` revert
@@ -207,8 +210,8 @@ A block is an editor too, with its text as the one owned setting.
   the output is identical, or revert would delete the user's file.
 - Order is backup, state, write. A crash before the write leaves state pointing
   at a real backup; a failed write rolls state back.
-- Revert backs up the current file too, and removes state last. A lost backup
-  fails the revert and changes nothing.
+- Revert backs up a file edited since apply, and removes state last. A lost
+  backup fails the revert and changes nothing.
 - An untouched file (hash match) reverts to the first backup, byte for byte. An
   edited file reverts key by key: each owned key takes its value from the first
   backup, or goes away with any parent vimify created. Other edits survive.
@@ -239,7 +242,7 @@ src/
   plan.rs       desired state × state → ops
   render.rs     port + reference → values / template text
   edit/         Editor impls: toml, yaml, lines, block
-  backup.rs     copy to first free .bak name
+  backup.rs     reuse an identical .bak, else copy to the first free name
   apply.rs      strategies, atomic write, revert
   state.rs      applied-state store
   ui/           ratatui screens: config, scan, select, rollback, confirm

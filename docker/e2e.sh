@@ -176,7 +176,7 @@ test_rerun_is_current() {
   absent "$CFG.bak.1"
 }
 
-test_rebinding_updates_and_keeps_the_first_backup() {
+test_rebinding_updates_without_a_new_backup() {
   seed
   apply
   mkdir -p ~/.config/vimify
@@ -186,7 +186,7 @@ test_rebinding_updates_and_keeps_the_first_backup() {
   off_screen 'updated manually'
   accept
   in_file "$CFG" 'nextItem-alt: m'
-  exists "$CFG.bak.1"
+  absent "$CFG.bak.1"
   is_original "$CFG.bak"
   in_file "$STATE" "backup = \"$CFG.bak\""
 }
@@ -322,12 +322,12 @@ test_manual_key_edit_warns_on_revert() {
   in_file "$CFG.bak.1" 'prevItem-alt: i'
 }
 
-test_revert_of_a_created_file_removes_it() {
+test_revert_of_an_untouched_created_file_removes_it() {
   reset
   apply
   revert
   absent "$CFG"
-  in_file "$CFG.bak" 'nextItem-alt: j'
+  absent "$CFG.bak"
 }
 
 test_lost_backup_refuses_to_revert() {
