@@ -29,10 +29,12 @@ impl ConfirmScreen {
     }
 
     pub fn render(&self, frame: &mut Frame) {
-        let [title, warning, list, tools, footer] = Layout::vertical([
+        let legend_lines = self.legend();
+        let [title, warning, list, legend, tools, footer] = Layout::vertical([
             Constraint::Length(2),
             Constraint::Length(3),
             Constraint::Fill(1),
+            Constraint::Length(legend_lines.len() as u16 + 1),
             Constraint::Length(2),
             Constraint::Length(1),
         ])
@@ -41,7 +43,7 @@ impl ConfirmScreen {
 
         let mut warning_text = if self.ops.iter().any(|op| op.action.writes()) {
             vec![Line::from(
-                "⚠ Config for these tools will be overridden. Each existing file is backed up next to itself first."
+                "⚠️ Config for these tools will be overridden. Each existing file is backed up next to itself first."
                     .yellow()
                     .bold(),
             )]
@@ -50,7 +52,7 @@ impl ConfirmScreen {
         };
         if self.ops.iter().any(|op| op.action.manual()) {
             warning_text.push(Line::from(
-                "⚠ Shortcuts or theme were changed by hand. Confirming overrides those changes; a copy stays in the backup."
+                "⚠️ Shortcuts or theme were changed by hand. Confirming overrides those changes; a copy stays in the backup."
                     .red()
                     .bold(),
             ));
@@ -67,6 +69,7 @@ impl ConfirmScreen {
             warning,
         );
         frame.render_widget(self.list(), list);
+        frame.render_widget(Paragraph::new(legend_lines), legend);
         frame.render_widget(
             Line::from(vec!["Managed on later runs: ".dim(), managed.into()]),
             tools,
@@ -74,16 +77,29 @@ impl ConfirmScreen {
         frame.render_widget(Line::from("y confirm  n back  q quit").dim(), footer);
     }
 
+    /// One line per action present, in first-seen order.
+    fn legend(&self) -> Vec<Line<'_>> {
+        let mut seen = Vec::new();
+        for op in &self.ops {
+            let label = op.action.label();
+            if !seen.iter().any(|(l, _)| *l == label) {
+                seen.push((label, &op.action));
+            }
+        }
+        seen.into_iter()
+            .map(|(label, action)| {
+                Line::from(vec![
+                    Span::styled(format!("{label:12}"), style(action)),
+                    Span::from(meaning(action)).dim(),
+                ])
+            })
+            .collect()
+    }
+
     fn list(&self) -> List<'_> {
         let width = self.ops.iter().map(|op| op.tool.len()).max().unwrap_or(0);
         List::new(self.ops.iter().map(|op| {
-            let style = match op.action {
-                Action::Apply { .. } => Style::new().blue(),
-                Action::Create { .. } => Style::new().green(),
-                Action::Update { .. } => Style::new().yellow(),
-                Action::Revert { .. } => Style::new().red(),
-                Action::Current { .. } | Action::Unsupported => Style::new().dim(),
-            };
+            let style = style(&op.action);
             let paths = op.action.paths();
             let detail = match paths.first() {
                 Some(path) => Span::from(paths::display(path)).dim(),
@@ -105,5 +121,28 @@ impl ConfirmScreen {
             let lines: Vec<Line> = std::iter::once(Line::from(spans)).chain(rest).collect();
             ListItem::new(lines)
         }))
+    }
+}
+
+fn style(action: &Action) -> Style {
+    match action {
+        Action::Apply { .. } => Style::new().blue(),
+        Action::Create { .. } => Style::new().green(),
+        Action::Update { .. } => Style::new().yellow(),
+        Action::Revert { .. } => Style::new().red(),
+        Action::Current { .. } | Action::Unsupported => Style::new().dim(),
+    }
+}
+
+fn meaning(action: &Action) -> &'static str {
+    match action {
+        Action::Apply { .. } => "first run for this tool; merges into its existing config",
+        Action::Create { .. } => "first run for this tool; no config yet, writes a new one",
+        Action::Update { .. } => {
+            "applied before; port, reference or a hand-edited key changed since"
+        }
+        Action::Revert { .. } => "deselected; restores the config from before vimify",
+        Action::Current { .. } => "applied before and unchanged; skipped",
+        Action::Unsupported => "port has no editor or mappings yet; skipped",
     }
 }
