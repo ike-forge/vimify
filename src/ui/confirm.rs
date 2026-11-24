@@ -7,6 +7,7 @@ use ratatui::widgets::{List, ListItem, Paragraph, Wrap};
 
 use crate::paths;
 use crate::plan::{Action, Op};
+use crate::reference::Tools;
 
 pub enum Choice {
     Accept,
@@ -15,7 +16,7 @@ pub enum Choice {
 
 pub struct ConfirmScreen {
     pub ops: Vec<Op>,
-    pub exclusions: Vec<String>,
+    pub tools: Tools,
 }
 
 impl ConfirmScreen {
@@ -28,7 +29,7 @@ impl ConfirmScreen {
     }
 
     pub fn render(&self, frame: &mut Frame) {
-        let [title, warning, list, exclusions, footer] = Layout::vertical([
+        let [title, warning, list, tools, footer] = Layout::vertical([
             Constraint::Length(2),
             Constraint::Length(3),
             Constraint::Fill(1),
@@ -54,10 +55,10 @@ impl ConfirmScreen {
                     .bold(),
             ));
         }
-        let excluded = if self.exclusions.is_empty() {
-            "none".to_owned()
-        } else {
-            self.exclusions.join(", ")
+        let managed = match &self.tools {
+            Tools::All => "all".to_owned(),
+            Tools::Only(list) if list.is_empty() => "none".to_owned(),
+            Tools::Only(list) => list.join(", "),
         };
 
         frame.render_widget(Line::from(vec!["vimify".bold(), " confirm".into()]), title);
@@ -67,8 +68,8 @@ impl ConfirmScreen {
         );
         frame.render_widget(self.list(), list);
         frame.render_widget(
-            Line::from(vec!["Excluded on later runs: ".dim(), excluded.into()]),
-            exclusions,
+            Line::from(vec!["Managed on later runs: ".dim(), managed.into()]),
+            tools,
         );
         frame.render_widget(Line::from("y confirm  n back  q quit").dim(), footer);
     }

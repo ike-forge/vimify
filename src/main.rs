@@ -16,8 +16,8 @@ enum Command {
     Config,
     /// Scan for supported tools and apply the config to the selected ones
     Apply {
-        /// No prompts: apply to every detected tool not in `exclusions`. Fails if
-        /// the config is missing, invalid, or has no `exclusions` (`[]` for none)
+        /// No prompts: apply to the detected tools listed in `tools`. Fails if the
+        /// config is missing, invalid, or has no `tools` (`"all"` for every tool)
         #[arg(short, long)]
         yes: bool,
     },
@@ -67,16 +67,18 @@ fn apply(reference: &reference::Reference, ports: Vec<port::Port>) -> Result<()>
     let Some(outcome) = ui::apply(scan_dirs(reference), ports, reference, &state)? else {
         return Ok(());
     };
-    reference::save_exclusions(&outcome.exclusions)?;
+    reference::save_tools(&outcome.tools)?;
     execute(reference, &outcome.ops, &outcome.ports, &mut state)
 }
 
-/// What an interactive apply does when the user confirms the preselection. Exclusions
-/// are left as saved.
+/// What an interactive apply does when the user confirms the preselection. `tools`
+/// is left as saved.
 fn apply_saved(reference: &reference::Reference, ports: &[port::Port]) -> Result<()> {
     let mut state = state::load()?;
     let found = scan::detect(&scan_dirs(reference), ports);
-    let (selection, ports) = plan::preselect(&found, ports, &reference.exclusions);
+    let none = reference::Tools::Only(Vec::new());
+    let tools = reference.tools.as_ref().unwrap_or(&none);
+    let (selection, ports) = plan::preselect(&found, ports, tools);
     let ops = plan::plan(&selection, &ports, &state, &reference.hash()?);
     if !ops.iter().any(|op| op.action.writes()) {
         println!("Nothing to apply.");
@@ -91,10 +93,10 @@ fn rollback(reference: &reference::Reference) -> Result<()> {
         println!("Nothing to roll back: no tool is applied.");
         return Ok(());
     }
-    let Some(outcome) = ui::rollback(&state, &reference.exclusions)? else {
+    let Some(outcome) = ui::rollback(&state, reference.tools.as_ref())? else {
         return Ok(());
     };
-    reference::save_exclusions(&outcome.exclusions)?;
+    reference::save_tools(&outcome.tools)?;
     execute(reference, &outcome.ops, &outcome.ports, &mut state)
 }
 

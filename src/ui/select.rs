@@ -9,10 +9,12 @@ use super::{cursor_list, row};
 use crate::paths;
 use crate::plan::Selection;
 use crate::port::{self, Port};
+use crate::reference::Tools;
 use crate::scan::Detection;
 
-/// Rows above the tools: `Apply changes`, `select all`, `select none`.
-const ACTIONS: usize = 3;
+/// Rows above the tools: `Apply changes`, `apply everywhere`, `select manually`,
+/// `select none`.
+const ACTIONS: usize = 4;
 
 struct Tool {
     detection: Detection,
@@ -30,6 +32,8 @@ impl Tool {
 
 pub struct SelectScreen {
     tools: Vec<Tool>,
+    /// Saves `tools = "all"`; any change to a tool's checkbox leaves it.
+    everywhere: bool,
     cursor: usize,
     /// Index into `tools` of the tool shown in the info modal.
     info: Option<usize>,
@@ -37,12 +41,13 @@ pub struct SelectScreen {
 
 impl SelectScreen {
     /// Supported tools first, so the greyed-out ones collect at the bottom.
-    pub fn new(found: Vec<Detection>, ports: &[Port], exclusions: &[String]) -> Self {
+    pub fn new(found: Vec<Detection>, ports: &[Port], tools: Option<&Tools>) -> Self {
+        let everywhere = matches!(tools, None | Some(Tools::All));
+        let listed = |name: &str| tools.is_some_and(|t| t.contains(name));
         let mut tools: Vec<Tool> = found
             .into_iter()
             .map(|detection| {
                 let resolved = port::resolve(ports, &detection.port, detection.version.as_ref());
-                let excluded = exclusions.contains(&detection.port);
                 let (port, untested) = resolved.unzip();
                 let mut tool = Tool {
                     detection,
@@ -50,13 +55,14 @@ impl SelectScreen {
                     untested: untested.unwrap_or(false),
                     checked: false,
                 };
-                tool.checked = tool.supported() && !excluded;
+                tool.checked = tool.supported() && (everywhere || listed(&tool.detection.port));
                 tool
             })
             .collect();
         tools.sort_by_key(|t| (!t.supported(), t.detection.port.clone()));
         Self {
             tools,
+            everywhere,
             cursor: 0,
             info: None,
         }
@@ -92,8 +98,8 @@ impl SelectScreen {
         false
     }
 
-    /// Unsupported tools are in neither list: they are not the user's exclusions, and
-    /// must be offered once a port covers them.
+    /// Unsupported tools are in neither list: they are not the user's choice, and with
+    /// `tools = "all"` must be applied once a port covers them.
     pub fn selection(&self) -> Selection {
         let (selected, excluded): (Vec<_>, Vec<_>) = self.supported().partition(|t| t.checked);
         let names = |tools: Vec<&Tool>| {
@@ -112,14 +118,28 @@ impl SelectScreen {
         self.tools.iter().filter(|t| t.supported())
     }
 
+    pub fn everywhere(&self) -> bool {
+        self.everywhere
+    }
+
     fn toggle(&mut self) {
         match self.cursor {
             0 => {}
-            1 => self.set_all(true),
-            2 => self.set_all(false),
+            1 => {
+                self.everywhere = true;
+                self.set_all(true);
+            }
+            2 => self.everywhere = false,
+            3 => {
+                self.everywhere = false;
+                self.set_all(false);
+            }
             i => {
                 let tool = &mut self.tools[i - ACTIONS];
-                tool.checked = tool.supported() && !tool.checked;
+                if tool.supported() {
+                    tool.checked = !tool.checked;
+                    self.everywhere = false;
+                }
             }
         }
     }
@@ -128,10 +148,6 @@ impl SelectScreen {
         for tool in &mut self.tools {
             tool.checked = checked && tool.supported();
         }
-    }
-
-    fn all_checked(&self) -> bool {
-        self.supported().next().is_some() && self.supported().all(|t| t.checked)
     }
 
     fn none_checked(&self) -> bool {
@@ -154,9 +170,16 @@ impl SelectScreen {
             .unwrap_or(0);
         let items = [
             ListItem::new(Line::from(" Apply changes ".reversed())),
-            row(self.all_checked(), vec!["select all".into()]),
+            radio(
+                self.everywhere,
+                vec![
+                    "apply everywhere".into(),
+                    "  every supported tool, also ones installed later".dim(),
+                ],
+            ),
+            radio(!self.everywhere, vec!["select manually".into()]),
             row(self.none_checked(), vec!["select none".into()]),
-            ListItem::new(Line::from("─".repeat(width.max("select none".len()) + 4)).dim()),
+            ListItem::new(Line::from("─".repeat(width.max("select manually".len()) + 4)).dim()),
         ]
         .into_iter()
         .chain(self.tools.iter().map(|tool| {
@@ -211,6 +234,11 @@ impl SelectScreen {
             render_info(frame, tool, anchor);
         }
     }
+}
+
+fn radio(on: bool, label: Vec<Span<'static>>) -> ListItem<'static> {
+    let button = if on { "(•) ".blue() } else { "( ) ".dim() };
+    ListItem::new(Line::from([vec![button], label].concat()))
 }
 
 fn version_text(tool: &Tool) -> String {
@@ -298,7 +326,7 @@ mod tests {
     const SUPPORTED: &str = "schema = 1\nversion = \"1\"\nbinaries = []\n[[target]]\nformat = \"yaml\"\nstrategy = \"edit\"\nkey_notation = \"angle\"\npaths = [\"~/.config/c/config.yml\"]\n[target.keys]\na = \"down\"\n[target.theme]\nb = \"{accent}\"\n";
     const UNSUPPORTED: &str = "schema = 1\nversion = \"1\"\nbinaries = []\n";
 
-    fn mixed(supported: &[&str], unsupported: &[&str], exclusions: &[&str]) -> SelectScreen {
+    fn mixed(supported: &[&str], unsupported: &[&str], tools: Option<Tools>) -> SelectScreen {
         let ports: Vec<Port> = supported
             .iter()
             .map(|n| port::parse(n, SUPPORTED).unwrap())
@@ -316,12 +344,11 @@ mod tests {
                 version: Some(semver::Version::new(1, 0, 0)),
             })
             .collect();
-        let exclusions: Vec<String> = exclusions.iter().map(|e| e.to_string()).collect();
-        SelectScreen::new(found, &ports, &exclusions)
+        SelectScreen::new(found, &ports, tools.as_ref())
     }
 
-    fn screen(names: &[&str], exclusions: &[&str]) -> SelectScreen {
-        mixed(names, &[], exclusions)
+    fn screen(names: &[&str]) -> SelectScreen {
+        mixed(names, &[], None)
     }
 
     fn text(tool: &Tool) -> String {
@@ -346,83 +373,96 @@ mod tests {
     }
 
     #[test]
-    fn exclusions_start_unchecked() {
-        let s = screen(&["a", "b", "c"], &["b"]);
+    fn unlisted_tools_start_unchecked() {
+        let listed = Tools::Only(vec!["a".into(), "c".into()]);
+        let s = mixed(&["a", "b", "c"], &[], Some(listed));
         assert_eq!(s.selection(), selection(&["a", "c"], &["b"]));
     }
 
     #[test]
-    fn select_none_then_all() {
-        let mut s = screen(&["a", "b"], &[]);
+    fn first_run_and_all_start_everywhere() {
+        assert!(screen(&["a"]).everywhere());
+        assert!(mixed(&["a"], &[], Some(Tools::All)).everywhere());
+        assert!(!mixed(&["a"], &[], Some(Tools::Only(vec![]))).everywhere());
+    }
+
+    #[test]
+    fn select_none_then_everywhere() {
+        let mut s = screen(&["a", "b"]);
+        press(&mut s, "jjj ");
+        assert!(s.none_checked() && !s.everywhere());
+        press(&mut s, "kk ");
+        assert!(s.everywhere());
+        assert_eq!(s.selection(), selection(&["a", "b"], &[]));
+    }
+
+    #[test]
+    fn manual_keeps_the_checks() {
+        let mut s = screen(&["a", "b"]);
         press(&mut s, "jj ");
-        assert!(s.none_checked());
-        press(&mut s, "k ");
-        assert!(s.all_checked());
+        assert!(!s.everywhere());
+        assert_eq!(s.selection(), selection(&["a", "b"], &[]));
     }
 
     #[test]
     fn toggling_a_tool_updates_action_rows() {
-        let mut s = screen(&["a", "b"], &[]);
-        press(&mut s, "jjj ");
+        let mut s = screen(&["a", "b"]);
+        press(&mut s, "jjjj ");
         assert_eq!(s.selection(), selection(&["b"], &["a"]));
-        assert!(!s.all_checked() && !s.none_checked());
+        assert!(!s.everywhere() && !s.none_checked());
     }
 
     #[test]
     fn cursor_stays_in_bounds() {
-        let mut s = screen(&["a"], &[]);
+        let mut s = screen(&["a"]);
         press(&mut s, "kkk");
         assert_eq!(s.cursor, 0);
-        press(&mut s, "jjjjj");
-        assert_eq!(s.cursor, 3);
+        press(&mut s, "jjjjjj");
+        assert_eq!(s.cursor, 4);
         press(&mut s, "g");
         assert_eq!(s.cursor, 0);
         press(&mut s, "G");
-        assert_eq!(s.cursor, 3);
+        assert_eq!(s.cursor, 4);
     }
 
     #[test]
     fn unsupported_tools_start_unchecked_and_in_neither_list() {
-        let s = mixed(&["a"], &["b"], &[]);
+        let s = mixed(&["a"], &["b"], None);
         assert_eq!(s.selection(), selection(&["a"], &[]));
     }
 
     #[test]
     fn unsupported_tools_cannot_be_toggled() {
-        let mut s = mixed(&[], &["a"], &[]);
-        press(&mut s, "jjj ");
+        let mut s = mixed(&[], &["a"], None);
+        press(&mut s, "jjjj ");
         assert_eq!(s.selection(), selection(&[], &[]));
         assert!(!s.tools[0].checked);
+        assert!(s.everywhere());
     }
 
     #[test]
-    fn select_all_skips_unsupported_tools() {
-        let mut s = mixed(&["a"], &["b"], &[]);
-        press(&mut s, "jj ");
+    fn everywhere_skips_unsupported_tools() {
+        let mut s = mixed(&["a"], &["b"], None);
+        press(&mut s, "jjj ");
         assert!(s.none_checked());
-        press(&mut s, "k ");
-        assert!(s.all_checked());
+        press(&mut s, "kk ");
         assert_eq!(s.selection(), selection(&["a"], &[]));
+        assert!(!s.tools[1].checked);
     }
 
     #[test]
     fn supported_tools_sort_first() {
-        let s = mixed(&["z"], &["a"], &[]);
+        let s = mixed(&["z"], &["a"], None);
         let names: Vec<_> = s.tools.iter().map(|t| t.detection.port.as_str()).collect();
         assert_eq!(names, ["z", "a"]);
     }
 
     #[test]
-    fn with_nothing_supported_select_all_is_not_checked() {
-        assert!(!mixed(&[], &["a"], &[]).all_checked());
-    }
-
-    #[test]
     fn info_opens_on_a_tool_and_any_key_closes_it() {
-        let mut s = screen(&["a"], &[]);
+        let mut s = screen(&["a"]);
         press(&mut s, "i");
         assert!(!s.captures_input());
-        press(&mut s, "jjji");
+        press(&mut s, "jjjji");
         assert!(s.captures_input());
 
         assert!(!s.handle(KeyCode::Enter));
@@ -432,14 +472,14 @@ mod tests {
 
     #[test]
     fn keys_do_not_reach_the_list_while_the_modal_is_open() {
-        let mut s = screen(&["a"], &[]);
-        press(&mut s, "jjji ");
+        let mut s = screen(&["a"]);
+        press(&mut s, "jjjji ");
         assert!(s.tools[0].checked);
     }
 
     #[test]
     fn info_lists_what_the_port_covers() {
-        let s = screen(&["a"], &[]);
+        let s = screen(&["a"]);
         let out = text(&s.tools[0]);
         assert!(out.contains("c/config.yml"), "{out}");
         assert!(out.contains("Keys       down"), "{out}");
@@ -452,7 +492,7 @@ mod tests {
 
     #[test]
     fn info_says_why_a_tool_is_unsupported() {
-        let s = mixed(&[], &["a"], &[]);
+        let s = mixed(&[], &["a"], None);
         let out = text(&s.tools[0]);
         assert!(out.contains("Not supported:"), "{out}");
         assert!(!out.contains("Keys"), "{out}");
@@ -468,7 +508,7 @@ mod tests {
             version: Some(semver::Version::new(2, 1, 0)),
         }];
 
-        let s = SelectScreen::new(found, &[port], &[]);
+        let s = SelectScreen::new(found, &[port], None);
 
         assert!(s.tools[0].untested);
         assert!(s.tools[0].checked);
@@ -479,7 +519,7 @@ mod tests {
 
     #[test]
     fn enter_confirms_on_the_button_and_toggles_elsewhere() {
-        let mut s = screen(&["a"], &[]);
+        let mut s = screen(&["a"]);
         press(&mut s, "G");
         assert!(!s.handle(KeyCode::Enter));
         assert!(!s.tools[0].checked);

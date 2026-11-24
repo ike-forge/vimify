@@ -100,10 +100,11 @@ $ vimify config
 
 | Path                                | Content                                        |
 | ----------------------------------- | ---------------------------------------------- |
-| `~/.config/vimify/config.toml`      | Reference config, extra scan paths, exclusions |
+| `~/.config/vimify/config.toml`      | Reference config, extra scan paths, tools      |
 
-Exclusions live in the config, not in a state dir, so a dotfiles checkout
-carries them to new machines.
+`tools` lives in the config, not in a state dir, so a dotfiles checkout carries
+the selection to new machines. It lists what to manage rather than what to skip,
+so a tool the user never chose is not written there.
 
 ## Releasing
 

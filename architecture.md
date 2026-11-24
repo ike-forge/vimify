@@ -4,7 +4,7 @@
 
 | Term          | Meaning                                                              |
 | ------------- | -------------------------------------------------------------------- |
-| Reference     | User's `~/.config/vimify/config.toml`: theme, accent, keys, scan paths, exclusions. Unset theme and actions take built-in defaults |
+| Reference     | User's `~/.config/vimify/config.toml`: theme, accent, keys, scan paths, tools. Unset theme and actions take built-in defaults |
 | Action        | A vimify-defined verb (`down`, `yank`, ...) bound to a key in the reference |
 | Role          | A semantic colour slot (`accent`, `selection`, ...) filled by a palette |
 | Palette       | Role → hex map for one theme (`catppuccin-frappe`). Ships with vimify. A palette with `[accents]` lets the reference pick its `accent` by name |
@@ -20,8 +20,8 @@
 | `vimify`          | Prints help                                                       |
 | `vimify config`   | Edits theme and keys. Saves only; applied tools plan as `update` on the next apply. Reset to defaults is an unsaved edit; saving removes defaulted settings from the file, so later default changes reach the user |
 | `vimify apply`    | The flow below                                                    |
-| `vimify apply -y` | No UI: scan, take the select screen's initial checks, execute. Fails without a config file, on an invalid one, or without `exclusions` (`[]` opts in to every tool). An unknown tool in `exclusions` is invalid. Leaves `exclusions` as saved |
-| `vimify rollback` | Lists applied tools, all unchecked; checked ones revert through confirm and execute, and join `exclusions`. No scan: revert needs only state |
+| `vimify apply -y` | No UI: scan, take the select screen's initial checks, execute. Fails without a config file, on an invalid one, or without `tools`. An unknown tool in `tools` is invalid. Leaves `tools` as saved |
+| `vimify rollback` | Lists applied tools, all unchecked; checked ones revert through confirm and execute, and leave `tools`. `"all"` narrows to the applied tools that stay. No scan: revert needs only state |
 
 ## Flow
 
@@ -31,12 +31,14 @@ scan ──▶ select ──▶ plan ──▶ confirm ──▶ execute ──�
 
 1. **scan:** walk scan dirs, match binaries against port `binaries`. One progress
    tick per dir. Runs on a worker thread, events over a channel to the UI loop.
-2. **select:** `Apply changes`, `select all`, `select none`, then detected
-   tools with status (`applied`, `modified`, `update`). Enter on `Apply changes`
-   goes to confirm; on any other row it toggles. Initially checked: every
-   supported tool not in `exclusions`. Unsupported tools are greyed out at the
-   bottom: they cannot be checked and never enter `exclusions`, so they are
-   offered once a port covers them. `i` opens a modal with what the port covers.
+2. **select:** `Apply changes`, then a choice between `apply everywhere` and
+   `select manually`, `select none`, then detected tools with status (`applied`,
+   `modified`, `update`). Enter on `Apply changes` goes to confirm; on any other
+   row it toggles. `apply everywhere` checks every supported tool; changing any
+   checkbox switches to `select manually`, keeping the other checks. It starts
+   selected on a first run and with `tools = "all"`; otherwise `select manually`
+   starts with the tools in `tools` checked. Unsupported tools are greyed out at
+   the bottom and cannot be checked. `i` opens a modal with what the port covers.
 3. **plan:** checkboxes are desired state, diffed against state:
 
    | Checked | Applied | Op                         |
@@ -46,8 +48,9 @@ scan ──▶ select ──▶ plan ──▶ confirm ──▶ execute ──�
    | no      | yes     | revert                     |
    | no      | no      | none                       |
 
-   Unchecked tools are written to `exclusions`, as `[]` when none are, which is
-   what lets `apply -y` run.
+   `apply everywhere` saves `tools = "all"`, which also covers tools installed or
+   supported later. `select manually` saves the checked tools; listed tools not
+   detected this run stay listed. Either is what lets `apply -y` run.
 4. **confirm:** the override warning, listing every file to apply and revert.
 5. **execute:** per tool, independently. One failure does not stop the others.
 
@@ -252,8 +255,8 @@ A block is an editor too, with its text as the one owned setting.
 - State lives in `~/.local/state/vimify/state.toml`, per tool: port version, hash
   of the reference used, and per file its path, backup path, hash after apply,
   format, strategy, and each owned key with the value written.
-- The reference hash covers `theme` and `keys` only. `exclusions` live in the same
-  file and change on every selection, so they must not trigger a re-apply.
+- The reference hash covers `theme` and `keys` only. `tools` lives in the same
+  file and changes on every selection, so it must not trigger a re-apply.
 - An owned key differing from the value written = `modified`. Edits to anything
   else do not count, nor does a tool rewriting its own config. The tool plans as
   `update` or `revert`, and the confirm screen lists it as updated manually, to

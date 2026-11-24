@@ -16,7 +16,7 @@ use ratatui::{DefaultTerminal, Frame};
 
 use crate::plan::{self, Op, Selection};
 use crate::port::Port;
-use crate::reference::Reference;
+use crate::reference::{Reference, Tools};
 use crate::state::State;
 use config::ConfigScreen;
 use confirm::{Choice, ConfirmScreen};
@@ -27,7 +27,7 @@ use select::SelectScreen;
 /// What the user accepted on the confirm screen.
 pub struct Outcome {
     pub ops: Vec<Op>,
-    pub exclusions: Vec<String>,
+    pub tools: Tools,
     /// The port each detected tool resolved to.
     pub ports: Vec<Port>,
 }
@@ -96,7 +96,7 @@ pub fn apply(
                     }
                     if scan.finished() && !scan.found().is_empty() {
                         let found = scan.found().to_vec();
-                        let select = SelectScreen::new(found, &ports, &reference.exclusions);
+                        let select = SelectScreen::new(found, &ports, reference.tools.as_ref());
                         *screen = Screen::Pick(Picker::Select(select));
                     }
                 }
@@ -107,7 +107,11 @@ pub fn apply(
                     let selection = s.selection();
                     ConfirmScreen {
                         ops: plan::plan(&selection, &s.ports(), state, &hash),
-                        exclusions: plan::exclusions(&reference.exclusions, &selection),
+                        tools: if s.everywhere() {
+                            Tools::All
+                        } else {
+                            Tools::Only(plan::listed(reference.tools.as_ref(), &selection))
+                        },
                     }
                 }
                 Picker::Rollback(_) => unreachable!("apply never shows the rollback picker"),
@@ -117,7 +121,7 @@ pub fn apply(
 }
 
 /// `None` if the user quit or no tool is applied.
-pub fn rollback(state: &State, exclusions: &[String]) -> Result<Option<Outcome>> {
+pub fn rollback(state: &State, tools: Option<&Tools>) -> Result<Option<Outcome>> {
     let screen = Screen::Pick(Picker::Rollback(RollbackScreen::new(state)));
     with_terminal(|terminal| {
         run(
@@ -129,13 +133,27 @@ pub fn rollback(state: &State, exclusions: &[String]) -> Result<Option<Outcome>>
                     Picker::Rollback(r) => r.checked(),
                     Picker::Select(_) => unreachable!("rollback never shows the select picker"),
                 };
-                let selection = Selection {
+                let reverted = Selection {
                     selected: Vec::new(),
+                    excluded: checked.clone(),
+                };
+                // Applied tools that stay: what `All` narrows to, as rollback never scans.
+                let kept = state
+                    .tools
+                    .keys()
+                    .filter(|t| !checked.contains(t))
+                    .cloned()
+                    .collect();
+                let listed = Selection {
+                    selected: kept,
                     excluded: checked,
                 };
                 ConfirmScreen {
-                    ops: plan::plan(&selection, &[], state, ""),
-                    exclusions: plan::exclusions(exclusions, &selection),
+                    ops: plan::plan(&reverted, &[], state, ""),
+                    tools: match tools {
+                        Some(Tools::All) if listed.excluded.is_empty() => Tools::All,
+                        _ => Tools::Only(plan::listed(tools, &listed)),
+                    },
                 }
             },
         )
@@ -211,7 +229,7 @@ fn run(
                 Some(Choice::Accept) => {
                     return Ok(Some(Outcome {
                         ops: c.ops,
-                        exclusions: c.exclusions,
+                        tools: c.tools,
                         ports: p.ports(),
                     }));
                 }

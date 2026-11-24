@@ -11,7 +11,7 @@ use crate::{actions, fsx, paths, state};
 
 const DEFAULT_THEME: &str = "catppuccin-frappe";
 
-/// Tools whose port was removed: still accepted in a saved `exclusions`, then dropped.
+/// Tools whose port was removed: still accepted in a saved `tools`, then dropped.
 const RETIRED: &[&str] = &["tmux"];
 
 #[derive(Debug, Clone, Deserialize)]
@@ -22,8 +22,45 @@ pub struct Reference {
     pub accent: Option<String>,
     pub keys: BTreeMap<String, String>,
     pub scan: Scan,
-    /// Ports the user unchecked; they start unchecked on later runs.
-    pub exclusions: Vec<String>,
+    /// Unset until the first selection is saved.
+    pub tools: Option<Tools>,
+}
+
+/// The tools vimify manages. Opt-in: a tool not listed is never written.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(try_from = "RawTools")]
+pub enum Tools {
+    /// Every supported tool, including ones installed or supported later.
+    All,
+    Only(Vec<String>),
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum RawTools {
+    Word(String),
+    List(Vec<String>),
+}
+
+impl TryFrom<RawTools> for Tools {
+    type Error = String;
+
+    fn try_from(raw: RawTools) -> Result<Self, String> {
+        match raw {
+            RawTools::Word(w) if w == "all" => Ok(Tools::All),
+            RawTools::Word(w) => Err(format!("tools: expected \"all\" or a list, got \"{w}\"")),
+            RawTools::List(list) => Ok(Tools::Only(list)),
+        }
+    }
+}
+
+impl Tools {
+    pub fn contains(&self, tool: &str) -> bool {
+        match self {
+            Tools::All => true,
+            Tools::Only(list) => list.iter().any(|t| t == tool),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -40,7 +77,7 @@ impl Default for Reference {
             accent: None,
             keys: default_keys(),
             scan: Scan::default(),
-            exclusions: Vec::new(),
+            tools: None,
         }
     }
 }
@@ -62,7 +99,7 @@ struct Hashed<'a> {
 }
 
 impl Reference {
-    /// Only what reaches tool configs: vimify rewrites `exclusions` in this same file,
+    /// Only what reaches tool configs: vimify rewrites `tools` in this same file,
     /// so hashing the file would re-apply every tool after each selection change.
     pub fn hash(&self) -> Result<String> {
         let text = toml::to_string(&Hashed {
@@ -93,9 +130,8 @@ pub fn load() -> Result<Reference> {
     }
 }
 
-/// For unattended runs. `exclusions` must be set, `[]` included: without it, the run
-/// would touch every tool the user never chose. Unknown names fail, so a typo cannot
-/// apply to a tool the user meant to exclude.
+/// For unattended runs, which apply only to tools the user chose: `tools` must be set.
+/// Unknown names fail, so a typo does not silently leave a tool out.
 pub fn load_saved(known: &[&str]) -> Result<Reference> {
     let path = path().context("cannot resolve vimify config path")?;
     let text = read(&path)?.with_context(|| format!("{} not found", path.display()))?;
@@ -104,21 +140,17 @@ pub fn load_saved(known: &[&str]) -> Result<Reference> {
 
 fn parse_saved(text: &str, known: &[&str]) -> Result<Reference> {
     let doc: DocumentMut = text.parse()?;
-    if !doc.contains_key("exclusions") {
+    if !doc.contains_key("tools") {
         bail!(
-            "exclusions not set: run `vimify apply` once, or set `exclusions = []` to apply to every tool"
+            "tools not set: run `vimify apply` once, or set `tools = \"all\"` to apply to every tool"
         );
     }
     let mut reference = parse(text)?;
-    reference
-        .exclusions
-        .retain(|t| !RETIRED.contains(&t.as_str()));
-    if let Some(tool) = reference
-        .exclusions
-        .iter()
-        .find(|t| !known.contains(&t.as_str()))
-    {
-        bail!("exclusions: unknown tool {tool}");
+    if let Some(Tools::Only(list)) = &mut reference.tools {
+        list.retain(|t| !RETIRED.contains(&t.as_str()));
+        if let Some(tool) = list.iter().find(|t| !known.contains(&t.as_str())) {
+            bail!("tools: unknown tool {tool}");
+        }
     }
     Ok(reference)
 }
@@ -137,10 +169,10 @@ fn parse(text: &str) -> Result<Reference> {
     Ok(reference)
 }
 
-/// Rewrites only `exclusions`; the rest of the user's file is untouched. An empty list
-/// is still written: `load_saved` requires the key.
-pub fn save_exclusions(exclusions: &[String]) -> Result<()> {
-    update(|text| with_exclusions(text, exclusions))
+/// Rewrites only `tools`; the rest of the user's file is untouched. An empty list is
+/// still written: `load_saved` requires the key.
+pub fn save_tools(tools: &Tools) -> Result<()> {
+    update(|text| with_tools(text, tools))
 }
 
 /// Writes only the theme and keys that differ from `before`, so defaults the user
@@ -168,9 +200,12 @@ fn read(path: &Path) -> Result<Option<String>> {
     }
 }
 
-fn with_exclusions(text: &str, exclusions: &[String]) -> Result<String> {
+fn with_tools(text: &str, tools: &Tools) -> Result<String> {
     let mut doc: DocumentMut = text.parse()?;
-    doc["exclusions"] = value(exclusions.iter().map(String::as_str).collect::<Array>());
+    doc["tools"] = match tools {
+        Tools::All => value("all"),
+        Tools::Only(list) => value(list.iter().map(String::as_str).collect::<Array>()),
+    };
     Ok(doc.to_string())
 }
 
@@ -246,7 +281,7 @@ mod tests {
     #[test]
     fn hash_ignores_everything_but_theme_and_keys() {
         let base = "theme = \"a\"\n[keys]\ndown = \"j\"\n";
-        let noisy = "theme = \"a\"\nexclusions = [\"btop\"]\n[keys]\ndown = \"j\"\n[scan]\nextra_paths = [\"~/bin\"]\n";
+        let noisy = "theme = \"a\"\ntools = [\"btop\"]\n[keys]\ndown = \"j\"\n[scan]\nextra_paths = [\"~/bin\"]\n";
         assert_eq!(hash(base), hash(noisy));
     }
 
@@ -266,73 +301,75 @@ mod tests {
 
     #[test]
     fn empty_reference_hashes() {
-        assert_eq!(hash(""), hash("exclusions = []\n"));
+        assert_eq!(hash(""), hash("tools = []\n"));
+    }
+
+    fn only(v: &[&str]) -> Tools {
+        Tools::Only(strings(v))
     }
 
     #[test]
     fn preserves_rest_of_file() {
         let text = "# my theme\ntheme = \"catppuccin-frappe\"\n\n[scan]\nextra_paths = [\"~/bin\"] # mine\n";
-        let out = with_exclusions(text, &strings(&["btop"])).unwrap();
+        let out = with_tools(text, &only(&["btop"])).unwrap();
         assert_eq!(
             out,
-            "# my theme\ntheme = \"catppuccin-frappe\"\nexclusions = [\"btop\"]\n\n[scan]\nextra_paths = [\"~/bin\"] # mine\n"
+            "# my theme\ntheme = \"catppuccin-frappe\"\ntools = [\"btop\"]\n\n[scan]\nextra_paths = [\"~/bin\"] # mine\n"
         );
     }
 
     #[test]
-    fn replaces_existing_exclusions() {
-        let out = with_exclusions("exclusions = [\"a\"]\n", &strings(&["b"])).unwrap();
-        assert_eq!(out, "exclusions = [\"b\"]\n");
+    fn replaces_existing_tools() {
+        let out = with_tools("tools = [\"a\"]\n", &only(&["b"])).unwrap();
+        assert_eq!(out, "tools = [\"b\"]\n");
+        let out = with_tools("tools = [\"a\"]\n", &Tools::All).unwrap();
+        assert_eq!(out, "tools = \"all\"\n");
     }
 
     #[test]
-    fn no_exclusions_still_saves_the_selection() {
-        assert_eq!(with_exclusions("", &[]).unwrap(), "exclusions = []\n");
+    fn no_tools_still_saves_the_selection() {
+        assert_eq!(with_tools("", &only(&[])).unwrap(), "tools = []\n");
     }
 
     const KNOWN: &[&str] = &["btop", "lazygit"];
 
     #[test]
     fn saved_config_loads() {
-        let reference = parse_saved("exclusions = [\"btop\"]\n", KNOWN).unwrap();
-        assert_eq!(reference.exclusions, strings(&["btop"]));
+        let reference = parse_saved("tools = [\"btop\"]\n", KNOWN).unwrap();
+        assert_eq!(reference.tools, Some(only(&["btop"])));
+        let reference = parse_saved("tools = \"all\"\n", KNOWN).unwrap();
+        assert_eq!(reference.tools, Some(Tools::All));
     }
 
     #[test]
-    fn saved_config_needs_exclusions() {
+    fn saved_config_needs_tools() {
         let err = parse_saved("theme = \"a\"\n", KNOWN).unwrap_err();
-        assert!(err.to_string().contains("exclusions not set"));
+        assert!(err.to_string().contains("tools not set"));
     }
 
     #[test]
-    fn saved_config_accepts_empty_exclusions() {
-        let reference = parse_saved("exclusions = []\n", KNOWN).unwrap();
-        assert!(reference.exclusions.is_empty());
+    fn saved_config_accepts_empty_tools() {
+        let reference = parse_saved("tools = []\n", KNOWN).unwrap();
+        assert_eq!(reference.tools, Some(only(&[])));
     }
 
     #[test]
-    fn saved_config_rejects_malformed_exclusions() {
-        assert!(parse_saved("exclusions = \"btop\"\n", KNOWN).is_err());
-        assert!(parse_saved("exclusions = [1]\n", KNOWN).is_err());
-        assert!(parse_saved("exclusions = [\n", KNOWN).is_err());
+    fn saved_config_rejects_malformed_tools() {
+        assert!(parse_saved("tools = \"btop\"\n", KNOWN).is_err());
+        assert!(parse_saved("tools = [1]\n", KNOWN).is_err());
+        assert!(parse_saved("tools = [\n", KNOWN).is_err());
     }
 
     #[test]
     fn saved_config_drops_retired_tools() {
-        let reference = parse_saved("exclusions = [\"tmux\", \"btop\"]\n", KNOWN).unwrap();
-        assert_eq!(reference.exclusions, ["btop"]);
+        let reference = parse_saved("tools = [\"tmux\", \"btop\"]\n", KNOWN).unwrap();
+        assert_eq!(reference.tools, Some(only(&["btop"])));
     }
 
     #[test]
     fn saved_config_rejects_unknown_tools() {
-        let err = parse_saved("exclusions = [\"btpo\"]\n", KNOWN).unwrap_err();
+        let err = parse_saved("tools = [\"btpo\"]\n", KNOWN).unwrap_err();
         assert!(err.to_string().contains("unknown tool btpo"));
-    }
-
-    #[test]
-    fn clearing_keeps_an_empty_list() {
-        let out = with_exclusions("exclusions = [\"a\"]\n", &[]).unwrap();
-        assert_eq!(out, "exclusions = []\n");
     }
 
     fn edited(text: &str, edit: impl FnOnce(&mut Reference)) -> String {
@@ -356,13 +393,13 @@ mod tests {
 
     #[test]
     fn settings_create_keys_table_and_theme() {
-        let out = edited("exclusions = []\n", |r| {
+        let out = edited("tools = []\n", |r| {
             r.theme = "other".into();
             r.keys.insert("quit".into(), "Q".into());
         });
         assert_eq!(
             out,
-            "exclusions = []\ntheme = \"other\"\n\n[keys]\nquit = \"Q\"\n"
+            "tools = []\ntheme = \"other\"\n\n[keys]\nquit = \"Q\"\n"
         );
     }
 

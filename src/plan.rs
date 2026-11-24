@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use crate::edit;
 use crate::port::{self, Port, Target};
+use crate::reference::Tools;
 use crate::scan::Detection;
 use crate::state::{self, Applied, AppliedFile, State};
 
@@ -83,11 +84,7 @@ impl Action {
 
 /// What the select screen starts with checked, and the port each detection resolved to.
 /// Unsupported tools are in neither list, as on that screen.
-pub fn preselect(
-    found: &[Detection],
-    ports: &[Port],
-    exclusions: &[String],
-) -> (Selection, Vec<Port>) {
+pub fn preselect(found: &[Detection], ports: &[Port], tools: &Tools) -> (Selection, Vec<Port>) {
     let mut selection = Selection {
         selected: Vec::new(),
         excluded: Vec::new(),
@@ -100,10 +97,10 @@ pub fn preselect(
         };
         if port.writable() {
             let name = detection.port.clone();
-            if exclusions.contains(&name) {
-                selection.excluded.push(name);
-            } else {
+            if tools.contains(&name) {
                 selection.selected.push(name);
+            } else {
+                selection.excluded.push(name);
             }
         }
         resolved.push(port);
@@ -202,12 +199,17 @@ fn file_edited_by_hand(file: &AppliedFile) -> bool {
         .any(|(setting, value)| editor.get(&edit::split(setting)).as_ref() != Some(value))
 }
 
-/// Exclusions for tools not detected this run are kept.
-pub fn exclusions(previous: &[String], selection: &Selection) -> Vec<String> {
+/// The list a manual selection saves. Listed tools not detected this run stay listed;
+/// `All` contributes nothing, as it never names a tool.
+pub fn listed(previous: Option<&Tools>, selection: &Selection) -> Vec<String> {
+    let previous = match previous {
+        Some(Tools::Only(list)) => list.as_slice(),
+        Some(Tools::All) | None => &[],
+    };
     let mut out: Vec<String> = previous
         .iter()
-        .filter(|e| !selection.selected.contains(e))
-        .chain(&selection.excluded)
+        .filter(|t| !selection.excluded.contains(t))
+        .chain(&selection.selected)
         .cloned()
         .collect();
     out.sort();
@@ -557,10 +559,17 @@ mod tests {
     }
 
     #[test]
-    fn exclusions_keep_undetected_and_drop_reselected() {
-        let previous = strings(&["gone", "back"]);
-        let out = exclusions(&previous, &selection(&["back"], &["new"]));
-        assert_eq!(out, strings(&["gone", "new"]));
+    fn listed_keeps_undetected_and_drops_unchecked() {
+        let previous = Tools::Only(strings(&["gone", "kept", "dropped"]));
+        let out = listed(Some(&previous), &selection(&["kept", "new"], &["dropped"]));
+        assert_eq!(out, strings(&["gone", "kept", "new"]));
+    }
+
+    #[test]
+    fn listed_from_all_or_nothing_is_the_checked_tools() {
+        let checked = selection(&["b", "a"], &["c"]);
+        assert_eq!(listed(Some(&Tools::All), &checked), strings(&["a", "b"]));
+        assert_eq!(listed(None, &checked), strings(&["a", "b"]));
     }
 
     fn detected(name: &str) -> Detection {
@@ -572,7 +581,7 @@ mod tests {
     }
 
     #[test]
-    fn preselect_checks_supported_tools_not_excluded() {
+    fn preselect_checks_listed_supported_tools() {
         let dir = TempDir::new().unwrap();
         let path = || Some(vec![dir.path().join("c.yml").display().to_string()]);
         let ports = [
@@ -581,7 +590,8 @@ mod tests {
             port("none", "1", None),
         ];
         let found = ["a", "b", "none"].map(detected);
-        let (chosen, resolved) = preselect(&found, &ports, &strings(&["b"]));
+        let listed = Tools::Only(strings(&["a", "none"]));
+        let (chosen, resolved) = preselect(&found, &ports, &listed);
         assert_eq!(chosen, selection(&["a"], &["b"]));
         assert_eq!(resolved.len(), 3);
     }

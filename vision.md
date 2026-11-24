@@ -18,13 +18,15 @@ the terminal and independent of the distro or window manager.
 1. Install vimify through a package manager (Homebrew, apt, ...).
 2. First run scans common install locations. Only tools vimify knows are
    reported; unknown tools are ignored silently.
-3. User chooses: **select all** (recommended) or **select manually**.
+3. User chooses: **apply everywhere** (recommended), which also covers tools
+   installed later, or **select manually**.
 4. A warning states that config for selected tools will be overridden.
 5. For each selected tool, the existing config is backed up next to the original
    (`~/.config/lazysql/config.yaml` → `~/.config/lazysql/config.yaml.bak`), then
    the vimify-owned keys are written.
-6. The selection is saved. On later runs, previously excluded tools stay
-   unchecked; newly installed known tools are offered.
+6. The selection is saved: `all`, or the list of tools picked manually. With a
+   manual list, tools not on it stay unchecked on later runs, newly installed
+   ones included.
 
 ## Operations
 

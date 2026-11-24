@@ -14,7 +14,8 @@ configured from one file.
 - Writes only keybindings and theme into each tool's config. Your other settings
   are left alone.
 - Backs up every file before changing it (`config.yaml` → `config.yaml.bak`).
-- Remembers your selection, so excluded tools stay excluded when you rerun it.
+- Remembers your selection in `tools`: `"all"` (apply everywhere, including
+  tools you install later) or the tools you picked manually.
 
 ## Install
 
@@ -30,14 +31,15 @@ managers.
 ```sh
 vimify config     # edit theme and keys
 vimify apply      # scan, select tools, apply
-vimify apply -y   # no prompts: apply to every detected tool not in `exclusions`
+vimify apply -y   # no prompts: apply to the detected tools in `tools`
 vimify rollback   # take vimify's keys back out of selected tools
 ```
 
 ![The tool list after the scan](docs/img/select.png)
 
 From the tool list you can install or revert vimify's config per tool, or for
-all supported tools at once (recommended). `rollback` lists only applied tools.
+all supported tools at once, now and later (recommended). `rollback` lists only
+applied tools.
 
 ![The confirm screen lists every file before anything is written](docs/img/confirm.png)
 
