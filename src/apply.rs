@@ -11,7 +11,7 @@ use crate::plan::{Action, Op};
 use crate::port::{Port, Strategy, Target};
 use crate::reference::Reference;
 use crate::state::{self, Applied, AppliedFile, State};
-use crate::{backup, edit, fsx, render};
+use crate::{backup, edit, fsx, render, scan};
 
 pub struct Context<'a> {
     pub ports: &'a [Port],
@@ -55,25 +55,23 @@ pub fn execute<'a>(
 }
 
 /// A failed refresh leaves the files right, so it warns instead of failing the tool.
-fn refresh(tool: &str, cx: &Context) -> Option<String> {
-    let port = cx.ports.iter().find(|p| p.name == tool)?;
+fn refresh(tool: &str, cx: &Context) -> Vec<String> {
+    let Some(port) = cx.ports.iter().find(|p| p.name == tool) else {
+        return Vec::new();
+    };
     if port.refresh_args.is_empty() {
-        return None;
+        return Vec::new();
     }
     let command = || format!("{tool} {}", port.refresh_args.join(" "));
-    let Some(binary) = cx
-        .scan_dirs
-        .iter()
-        .flat_map(|dir| port.binaries.iter().map(move |b| dir.join(b)))
-        .find(|path| path.is_file())
-    else {
-        return Some(format!("{tool} not found: run `{}` yourself", command()));
+    let installs = installs(port, cx.scan_dirs);
+    let Some(binary) = installs.first() else {
+        return vec![format!("{tool} not found: run `{}` yourself", command())];
     };
-    let output = Command::new(&binary)
+    let output = Command::new(binary)
         .args(&port.refresh_args)
         .stdin(Stdio::null())
         .output();
-    match output {
+    let mut warnings: Vec<String> = match output {
         Ok(output) if output.status.success() => None,
         Ok(output) => Some(format!(
             "`{}` failed: {}",
@@ -82,6 +80,49 @@ fn refresh(tool: &str, cx: &Context) -> Option<String> {
         )),
         Err(e) => Some(format!("`{}` failed: {e}", command())),
     }
+    .into_iter()
+    .collect();
+    warnings.extend(version_mismatch(port, &installs));
+    warnings
+}
+
+/// Every install of the tool on the scan path, first one first, symlinks collapsed.
+fn installs(port: &Port, dirs: &[PathBuf]) -> Vec<PathBuf> {
+    let mut seen = std::collections::HashSet::new();
+    dirs.iter()
+        .flat_map(|dir| port.binaries.iter().map(move |b| dir.join(b)))
+        .filter(|path| path.is_file())
+        .filter(|path| seen.insert(path.canonicalize().unwrap_or_else(|_| path.clone())))
+        .collect()
+}
+
+/// Installs share one cache, and an older one may not read what a newer one built.
+fn version_mismatch(port: &Port, installs: &[PathBuf]) -> Option<String> {
+    let [first, rest @ ..] = installs else {
+        return None;
+    };
+    if rest.is_empty() {
+        return None;
+    }
+    let version = |path: &Path| {
+        scan::tool_version(path, &port.version_args, port.integer_version)
+            .map_or_else(|| "unknown version".to_owned(), |v| v.to_string())
+    };
+    let built = version(first);
+    let others: Vec<String> = rest
+        .iter()
+        .map(|path| (path, version(path)))
+        .filter(|(_, v)| *v != built)
+        .map(|(path, v)| format!("{} ({v})", path.display()))
+        .collect();
+    (!others.is_empty()).then(|| {
+        format!(
+            "{} rebuilt the cache with {} ({built}); {} may not read it",
+            port.name,
+            first.display(),
+            others.join(", ")
+        )
+    })
 }
 
 pub struct Output {
@@ -1342,6 +1383,45 @@ mod tests {
 
         assert_eq!(warnings, ["t not found: run `t cache --build` yourself"]);
         assert!(fx.state.tools.contains_key("t"));
+    }
+
+    fn fake_tool(dir: &Path, name: &str, version: &str) {
+        let bin = dir.join(name);
+        fs::write(&bin, format!("#!/bin/sh\necho \"{name} {version}\"\n")).unwrap();
+        fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    fn refresh_warnings(versions: [&str; 2]) -> (Vec<String>, TempDir, TempDir) {
+        let first = TempDir::new().unwrap();
+        let second = TempDir::new().unwrap();
+        fake_tool(first.path(), "t", versions[0]);
+        fake_tool(second.path(), "t", versions[1]);
+        let path = config(&first, "b: 1\n");
+        let mut fx = refreshing(&first);
+        fx.scan_dirs.push(second.path().to_owned());
+        let warnings = fx.run(Action::Apply { paths: vec![path] }, "ref").unwrap();
+        (warnings, first, second)
+    }
+
+    #[test]
+    fn installs_of_different_versions_warn_about_the_shared_cache() {
+        let (warnings, first, second) = refresh_warnings(["0.26.1", "0.24.0"]);
+
+        assert_eq!(
+            warnings,
+            [format!(
+                "t rebuilt the cache with {} (0.26.1); {} (0.24.0) may not read it",
+                first.path().join("t").display(),
+                second.path().join("t").display()
+            )]
+        );
+    }
+
+    #[test]
+    fn installs_of_one_version_do_not_warn() {
+        let (warnings, _first, _second) = refresh_warnings(["0.26.1", "0.26.1"]);
+
+        assert!(warnings.is_empty(), "{warnings:?}");
     }
 
     #[test]

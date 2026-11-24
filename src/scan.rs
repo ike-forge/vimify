@@ -139,7 +139,7 @@ pub fn scan(dirs: &[PathBuf], ports: &[Port], tx: &Sender<Event>) -> Result<(), 
 
 /// Runs the tool, which is why only ports' own binaries get here. `None` if it does not
 /// answer: a tool that opens its UI instead must not hold up the scan.
-fn tool_version(path: &Path, args: &[String], integer: bool) -> Option<Version> {
+pub fn tool_version(path: &Path, args: &[String], integer: bool) -> Option<Version> {
     let mut child = Command::new(path)
         .args(args)
         .stdin(Stdio::null())
