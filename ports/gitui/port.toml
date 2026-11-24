@@ -1,5 +1,5 @@
 schema = 1
-version = "0.3.0"
+version = "0.4.0"
 binaries = ["gitui"]
 versions = ">=0.28"
 notes = "gitui binds one key per move, so the arrow keys, Home, End, PageUp and PageDown stop moving. Help moves from h to ?, since h is left. delete takes discard, reset lines, drop stash and delete branch or tag, each confirmed first. search takes the file, branch and log find keys."
@@ -36,25 +36,32 @@ open_help = "help"
 
 [[target]]
 format = "ron"
-strategy = "edit"
+strategy = "file"
 paths = [
   "$XDG_CONFIG_HOME/gitui/theme.ron",
   "~/Library/Application Support/gitui/theme.ron",
 ]
+template = '''
+(
+    selection_bg: Some("{selection}"),
+    selection_fg: Some("{text}"),
+    command_fg: Some("{text}"),
+    cmdbar_bg: Some("{surface}"),
+    disabled_fg: Some("{muted}"),
+    diff_line_add: Some("{success}"),
+    diff_line_delete: Some("{error}"),
+    diff_file_added: Some("{success}"),
+    diff_file_removed: Some("{error}"),
+    diff_file_modified: Some("{warning}"),
+    diff_file_moved: Some("{special}"),
+    danger_fg: Some("{error}"),
+    push_gauge_bg: Some("{accent}"),
+    push_gauge_fg: Some("{base}"),
+    branch_fg: Some("{accent}"),
+)'''
 
-[target.theme]
-selection_bg = 'Some("{selection}")'
-selection_fg = 'Some("{text}")'
-command_fg = 'Some("{text}")'
-cmdbar_bg = 'Some("{surface}")'
-disabled_fg = 'Some("{muted}")'
-diff_line_add = 'Some("{success}")'
-diff_line_delete = 'Some("{error}")'
-diff_file_added = 'Some("{success}")'
-diff_file_removed = 'Some("{error}")'
-diff_file_modified = 'Some("{warning}")'
-diff_file_moved = 'Some("{special}")'
-danger_fg = 'Some("{error}")'
-push_gauge_bg = 'Some("{accent}")'
-push_gauge_fg = 'Some("{base}")'
-branch_fg = 'Some("{accent}")'
+[target.upstream]
+catppuccin-latte = "themes/catppuccin-latte.ron"
+catppuccin-frappe = "themes/catppuccin-frappe.ron"
+catppuccin-macchiato = "themes/catppuccin-macchiato.ron"
+catppuccin-mocha = "themes/catppuccin-mocha.ron"

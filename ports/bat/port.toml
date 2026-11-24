@@ -1,12 +1,12 @@
 schema = 1
-version = "0.3.0"
+version = "0.4.0"
 # Debian and Ubuntu ship the binary as batcat.
 binaries = ["bat", "batcat"]
 versions = ">=0.25"
 # bat reads themes from its cache, not from themes/.
 refresh_args = ["cache", "--build"]
 
-notes = "Theme only: bat has no keybindings. Output longer than a screen pages through less, so its keys are less's. The less port rebinds them. Writes the palette as a vimify syntax theme and selects it, replacing any `--theme` in the config. Rebuilds bat's cache after apply and revert, which also picks up other themes and syntaxes in bat's config directory."
+notes = "Theme only: bat has no keybindings. Output longer than a screen pages through less, so its keys are less's. The less port rebinds them. Writes the official Catppuccin syntax theme, or the palette for other themes, as the vimify theme and selects it, replacing any `--theme` in the config. Rebuilds bat's cache after apply and revert, which also picks up other themes and syntaxes in bat's config directory."
 
 [[target]]
 format = "args"
@@ -244,3 +244,9 @@ template = '''
   </array>
 </dict>
 </plist>'''
+
+[target.upstream]
+catppuccin-latte = "themes/Catppuccin Latte.tmTheme"
+catppuccin-frappe = "themes/Catppuccin Frappe.tmTheme"
+catppuccin-macchiato = "themes/Catppuccin Macchiato.tmTheme"
+catppuccin-mocha = "themes/Catppuccin Mocha.tmTheme"

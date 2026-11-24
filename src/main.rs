@@ -1,6 +1,6 @@
 use anyhow::{Result, bail};
 use clap::{Parser, Subcommand};
-use vimify::{apply, palette, paths, plan, port, reference, scan, state, ui};
+use vimify::{apply, paths, plan, port, reference, scan, state, ui};
 
 /// One vim-style keymap and theme for your CLI and TUI tools.
 #[derive(Parser)]
@@ -35,7 +35,7 @@ fn main() -> Result<()> {
         }
         _ => reference::load()?,
     };
-    palette::load(&reference.theme)?;
+    reference.palette()?;
     match command {
         Command::Config => config(&reference),
         Command::Apply { yes: false } => apply(&reference, ports),
@@ -104,7 +104,7 @@ fn execute(
     ports: &[port::Port],
     state: &mut state::State,
 ) -> Result<()> {
-    let palette = palette::load(&reference.theme)?;
+    let palette = reference.palette()?;
     let hash = reference.hash()?;
     let dirs = scan_dirs(reference);
     let cx = apply::Context {

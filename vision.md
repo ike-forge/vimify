@@ -40,6 +40,7 @@ The single source of truth the user edits. Example:
 
 ```toml
 theme = "catppuccin-frappe"
+accent = "blue"
 
 [keys]
 left = "h"
@@ -67,6 +68,21 @@ Each supported tool has a mapping that translates the reference config into that
 tool's config format and location.
 
 - Ports live in this repository and ship inside the binary.
+
+## Themes
+
+Catppuccin for now; other themes will follow. Each tool takes its theme from the
+first source it has:
+
+1. **Built in:** the tool ships the theme (lfk's `catppuccin-frappe`). vimify
+   only selects it.
+2. **Official port:** the theme's own port for that tool, committed to this
+   repository. Designed per tool, so it covers what a shared palette cannot.
+3. **Shared palette:** colours generated from vimify's palette, for tools with
+   neither.
+
+Tweaks to a tool's theme are not kept: vimify takes the theme over and puts back
+the source's version.
 
 ## Ideas
 

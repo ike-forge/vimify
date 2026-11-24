@@ -1,5 +1,6 @@
 [general]
 live_config_reload = true
+import = ["~/.config/alacritty/vimify.toml"]
 
 [font]
 size = 12.0
@@ -7,48 +8,6 @@ size = 12.0
 # Mine, kept as is.
 [colors.primary]
 dim_foreground = "#a5adce"
-background = "#303446"
-foreground = "#c6d0f5"
-
-[colors.bright]
-black = "#737994"
-blue = "#8caaee"
-cyan = "#81c8be"
-green = "#a6d189"
-magenta = "#ca9ee6"
-red = "#e78284"
-white = "#c6d0f5"
-yellow = "#e5c890"
-
-[colors.cursor]
-cursor = "#c6d0f5"
-text = "#303446"
-
-[colors.normal]
-black = "#51576d"
-blue = "#8caaee"
-cyan = "#81c8be"
-green = "#a6d189"
-magenta = "#ca9ee6"
-red = "#e78284"
-white = "#c6d0f5"
-yellow = "#e5c890"
-
-[colors.search.focused_match]
-background = "#8caaee"
-foreground = "#303446"
-
-[colors.search.matches]
-background = "#e5c890"
-foreground = "#303446"
-
-[colors.selection]
-background = "#414559"
-text = "#c6d0f5"
-
-[colors.vi_mode_cursor]
-cursor = "#8caaee"
-text = "#303446"
 
 [[keyboard.bindings]]
 key = "N"

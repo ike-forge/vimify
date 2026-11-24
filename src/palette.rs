@@ -21,12 +21,44 @@ pub const ROLES: &[&str] = &[
 ];
 
 #[derive(Debug, Clone)]
-pub struct Palette(BTreeMap<String, String>);
+pub struct Palette {
+    roles: BTreeMap<String, String>,
+    /// Named colours the user can pick as `accent`, with the palette's own pick.
+    accents: BTreeMap<String, String>,
+    accent: Option<String>,
+}
 
 impl Palette {
     pub fn role(&self, name: &str) -> Option<&str> {
-        self.0.get(name).map(String::as_str)
+        self.roles.get(name).map(String::as_str)
     }
+
+    /// Name of the accent in use, for upstream themes that ship one file per accent.
+    pub fn accent_name(&self) -> Option<&str> {
+        self.accent.as_deref()
+    }
+
+    /// `None` keeps the palette's accent.
+    pub fn with_accent(mut self, accent: Option<&str>) -> Result<Self> {
+        let Some(name) = accent else {
+            return Ok(self);
+        };
+        let Some(color) = self.accents.get(name) else {
+            let known: Vec<&str> = self.accents.keys().map(String::as_str).collect();
+            bail!("unknown accent {name}. Known: {}", known.join(", "));
+        };
+        self.roles.insert("accent".to_owned(), color.clone());
+        self.accent = Some(name.to_owned());
+        Ok(self)
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct PaletteFile {
+    #[serde(default)]
+    accents: BTreeMap<String, String>,
+    #[serde(flatten)]
+    roles: BTreeMap<String, String>,
 }
 
 /// Roles a port value refers to: `"{accent}"` has `accent`, `bold` has none.
@@ -52,14 +84,27 @@ pub fn load(theme: &str) -> Result<Palette> {
     parse(text).with_context(|| format!("theme {theme}"))
 }
 
+/// `accent` may name one of `[accents]` instead of being a colour.
 fn parse(text: &str) -> Result<Palette> {
-    let colors: BTreeMap<String, String> = toml::from_str(text)?;
+    let PaletteFile { accents, mut roles } = toml::from_str(text)?;
+    for (name, color) in &accents {
+        if !is_hex(color) {
+            bail!("accent {name}: {color} is not a #rrggbb colour");
+        }
+    }
+    let accent = match roles.get("accent") {
+        Some(name) if accents.contains_key(name) => Some(name.clone()),
+        _ => None,
+    };
+    if let Some(name) = &accent {
+        roles.insert("accent".to_owned(), accents[name].clone());
+    }
     for role in ROLES {
-        if !colors.contains_key(*role) {
+        if !roles.contains_key(*role) {
             bail!("missing role {role}");
         }
     }
-    for (role, color) in &colors {
+    for (role, color) in &roles {
         if !ROLES.contains(&role.as_str()) {
             bail!("unknown role {role}");
         }
@@ -67,7 +112,11 @@ fn parse(text: &str) -> Result<Palette> {
             bail!("{role}: {color} is not a #rrggbb colour");
         }
     }
-    Ok(Palette(colors))
+    Ok(Palette {
+        roles,
+        accents,
+        accent,
+    })
 }
 
 fn is_hex(color: &str) -> bool {
@@ -91,6 +140,23 @@ mod tests {
     }
 
     #[test]
+    fn an_accent_name_picks_from_the_accents() {
+        let palette = load("catppuccin-frappe").unwrap();
+        assert_eq!(palette.accent_name(), Some("blue"));
+        let mauve = palette.with_accent(Some("mauve")).unwrap();
+        assert_eq!(mauve.role("accent"), Some("#ca9ee6"));
+        assert_eq!(mauve.accent_name(), Some("mauve"));
+    }
+
+    #[test]
+    fn a_palette_without_accents_refuses_one() {
+        let palette = load("solarized-dark").unwrap();
+        assert_eq!(palette.accent_name(), None);
+        let err = palette.with_accent(Some("blue")).unwrap_err();
+        assert!(err.to_string().contains("unknown accent blue"));
+    }
+
+    #[test]
     fn unknown_theme_is_an_error() {
         assert!(load("nope").unwrap_err().to_string().contains("nope"));
     }
@@ -105,14 +171,14 @@ mod tests {
 
     #[test]
     fn unknown_role_is_an_error() {
-        let err = parse(&format!("{FULL}new = \"#000000\"\n")).unwrap_err();
+        let err = parse(&format!("new = \"#000000\"\n{FULL}")).unwrap_err();
         assert!(err.to_string().contains("new"));
     }
 
     #[test]
     fn invalid_colour_is_an_error() {
-        let err = parse(&FULL.replace("#8caaee", "blue")).unwrap_err();
-        assert!(err.to_string().contains("blue"));
+        let err = parse(&FULL.replace("\"blue\"\n", "\"navy\"\n")).unwrap_err();
+        assert!(err.to_string().contains("navy"));
     }
 
     #[test]

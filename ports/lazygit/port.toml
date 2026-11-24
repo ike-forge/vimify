@@ -1,5 +1,5 @@
 schema = 1
-version = "0.3.0"
+version = "0.4.0"
 binaries = ["lazygit"]
 versions = ">=0.66"
 notes = "yank covers the file and commit copy keys; delete covers the shared remove key. quit replaces q and ctrl+c: lazygit has one slot for it. top and bottom stay on < and >: g and G already reset, pop stash and open pull requests. page_up and page_down scroll the main view. help opens the keybindings menu."
@@ -37,3 +37,9 @@ paths = [
 "gui.theme.selectedLineBgColor" = ["{selection}"]
 "gui.theme.unstagedChangesColor" = ["{error}"]
 "gui.theme.defaultFgColor" = ["{text}"]
+
+[target.upstream]
+catppuccin-latte = "themes/latte/{accent}.yml"
+catppuccin-frappe = "themes/frappe/{accent}.yml"
+catppuccin-macchiato = "themes/macchiato/{accent}.yml"
+catppuccin-mocha = "themes/mocha/{accent}.yml"

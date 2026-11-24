@@ -1,9 +1,9 @@
 schema = 1
-version = "0.3.0"
+version = "0.4.0"
 binaries = ["lfk"]
 versions = ">=0.19"
 
-notes = "quit, top, bottom and paging stay on q, g, G, ctrl+u and ctrl+d: lfk hardcodes them. help takes the keymaps panel, ? by default. Diff moves from d to D, which delete frees."
+notes = "quit, top, bottom and paging stay on q, g, G, ctrl+u and ctrl+d: lfk hardcodes them. Catppuccin is lfk's own colorscheme; other themes write the palette as theme overrides. help takes the keymaps panel, ? by default. Diff moves from d to D, which delete frees."
 
 [[target]]
 format = "yaml"
@@ -38,3 +38,19 @@ paths = ["$LFK_CONFIG_DIR/config.yaml", "$XDG_CONFIG_HOME/lfk/config.yaml"]
 "theme.base" = "{base}"
 "theme.bar_bg" = "{selection}"
 "theme.surface" = "{surface}"
+
+[target.builtin.catppuccin-latte]
+"appearance.colorscheme" = "catppuccin-latte"
+"keybindings.diff" = "D"
+
+[target.builtin.catppuccin-frappe]
+"appearance.colorscheme" = "catppuccin-frappe"
+"keybindings.diff" = "D"
+
+[target.builtin.catppuccin-macchiato]
+"appearance.colorscheme" = "catppuccin-macchiato"
+"keybindings.diff" = "D"
+
+[target.builtin.catppuccin-mocha]
+"appearance.colorscheme" = "catppuccin-mocha"
+"keybindings.diff" = "D"

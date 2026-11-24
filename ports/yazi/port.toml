@@ -1,9 +1,9 @@
 schema = 1
-version = "0.3.0"
+version = "0.4.0"
 binaries = ["yazi"]
 versions = ">=26.9"
 
-notes = "top stays on gg: g is yazi's goto prefix. help is not mapped: ? is find previous, as in vim. Keys cover the file list only; the task, preview and input layers keep their own. A keymap written as [[mgr.prepend_keymap]] tables is refused: use the inline array."
+notes = "top stays on gg: g is yazi's goto prefix. help is not mapped: ? is find previous, as in vim. Keys cover the file list only; the task, preview and input layers keep their own. A keymap written as [[mgr.prepend_keymap]] tables is refused: use the inline array. theme.toml is replaced whole. The Catppuccin theme points preview highlighting at ~/.config/yazi/Catppuccin-<flavour>.tmTheme, which vimify does not write."
 
 # prepend_keymap, not keymap: that replaces yazi's defaults, which must keep working.
 [[target]]
@@ -27,19 +27,26 @@ paths = ["$YAZI_CONFIG_HOME/keymap.toml", "$XDG_CONFIG_HOME/yazi/keymap.toml"]
 
 [[target]]
 format = "toml"
-strategy = "edit"
+strategy = "file"
 paths = ["$YAZI_CONFIG_HOME/theme.toml", "$XDG_CONFIG_HOME/yazi/theme.toml"]
+template = '''
+[mgr]
+cwd = { fg = "{accent}" }
+border_style = { fg = "{border}" }
 
-[target.theme]
-"mgr.cwd.fg" = "{accent}"
-"mgr.border_style.fg" = "{border}"
-"tabs.active.fg" = "{base}"
-"tabs.active.bg" = "{accent}"
-"tabs.inactive.fg" = "{accent}"
-"tabs.inactive.bg" = "{selection}"
-"mode.normal_main.fg" = "{base}"
-"mode.normal_main.bg" = "{accent}"
-"mode.normal_alt.fg" = "{accent}"
-"mode.normal_alt.bg" = "{selection}"
-"indicator.current.fg" = "{text}"
-"indicator.current.bg" = "{selection}"
+[tabs]
+active = { fg = "{base}", bg = "{accent}" }
+inactive = { fg = "{accent}", bg = "{selection}" }
+
+[mode]
+normal_main = { fg = "{base}", bg = "{accent}" }
+normal_alt = { fg = "{accent}", bg = "{selection}" }
+
+[indicator]
+current = { fg = "{text}", bg = "{selection}" }'''
+
+[target.upstream]
+catppuccin-latte = "themes/latte/catppuccin-latte-{accent}.toml"
+catppuccin-frappe = "themes/frappe/catppuccin-frappe-{accent}.toml"
+catppuccin-macchiato = "themes/macchiato/catppuccin-macchiato-{accent}.toml"
+catppuccin-mocha = "themes/mocha/catppuccin-mocha-{accent}.toml"

@@ -116,7 +116,7 @@ pub fn transform(
 }
 
 fn split(setting: &str) -> Vec<&str> {
-    setting.split('.').collect()
+    edit::split(setting)
 }
 
 /// One file of an apply, computed before any file is touched.
@@ -158,6 +158,12 @@ fn apply_tool(
             let output = (|| {
                 let original = match (&existing, recorded) {
                     (Some(text), Some(file)) if !same_editor(file, target) => unapply(file, text)?,
+                    (Some(text), Some(file)) => {
+                        let rendered = render::render(tool, target, cx.reference, cx.palette)?;
+                        let kept: Vec<&str> =
+                            rendered.values.iter().map(|(s, _)| s.as_str()).collect();
+                        drop_stale(file, text, &kept)?
+                    }
                     _ => existing.clone().unwrap_or_default(),
                 };
                 transform(tool, target, cx.reference, cx.palette, &original)
@@ -344,13 +350,35 @@ fn same_editor(file: &AppliedFile, target: &Target) -> bool {
 /// A port that changed format or strategy cannot find what the old one wrote, so the old
 /// editor takes it out first, or a block and an edited key would both stay.
 fn unapply(file: &AppliedFile, text: &str) -> Result<String> {
-    let original = match &file.backup {
+    restore_keys(file, text, &backup_text(file)?)
+}
+
+/// Settings the port no longer writes, as after a theme change, go back to the backup's
+/// values. Left in place they would be unowned and survive a revert.
+fn drop_stale(file: &AppliedFile, text: &str, kept: &[&str]) -> Result<String> {
+    let stale: Vec<&String> = file
+        .owned
+        .keys()
+        .filter(|s| !kept.contains(&s.as_str()))
+        .collect();
+    if stale.is_empty() {
+        return Ok(text.to_owned());
+    }
+    let original = backup_text(file)?;
+    let mut editor = edit::open(file.format, file.strategy, text)?;
+    for setting in stale {
+        editor.restore(&split(setting), &original)?;
+    }
+    Ok(editor.render())
+}
+
+fn backup_text(file: &AppliedFile) -> Result<String> {
+    match &file.backup {
         Some(backup) => {
-            fs::read_to_string(backup).with_context(|| format!("backup {}", backup.display()))?
+            fs::read_to_string(backup).with_context(|| format!("backup {}", backup.display()))
         }
-        None => String::new(),
-    };
-    restore_keys(file, text, &original)
+        None => Ok(String::new()),
+    }
 }
 
 fn restore_keys(file: &AppliedFile, text: &str, original: &str) -> Result<String> {
@@ -1368,15 +1396,128 @@ mod tests {
     }
 
     #[test]
+    fn a_theme_change_takes_back_the_old_themes_settings() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("c.yml");
+        let input = "mine: 1\n";
+        fs::write(&path, input).unwrap();
+        let mut fx = Fixture::new();
+        let text = format!(
+            "{PORT}[target.theme]\nbg = \"{{base}}\"\n[target.builtin.catppuccin-frappe]\nscheme = \"frappe\"\n"
+        );
+        fx.ports = vec![port::parse("t", &text).unwrap()];
+        fx.run(
+            Action::Apply {
+                paths: vec![path.clone()],
+            },
+            "a",
+        )
+        .unwrap();
+        assert!(
+            fs::read_to_string(&path)
+                .unwrap()
+                .contains("scheme: frappe")
+        );
+
+        fx.reference.theme = "solarized-dark".into();
+        fx.palette = palette::load("solarized-dark").unwrap();
+        fx.run(
+            Action::Update {
+                paths: vec![path.clone()],
+                manual: false,
+            },
+            "b",
+        )
+        .unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(!text.contains("scheme"), "{text}");
+        assert!(
+            text.contains("bg: '#002b36'") || text.contains("bg: \"#002b36\""),
+            "{text}"
+        );
+
+        fx.run(revert(&path), "b").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), input);
+    }
+
+    /// Golden files cover the default theme; this covers every other source of each port.
+    #[test]
+    fn ports_render_every_theme() {
+        for port in port::embedded().unwrap() {
+            for theme in palette::names() {
+                let reference = Reference {
+                    theme: theme.to_owned(),
+                    ..Reference::default()
+                };
+                let palette = reference.palette().unwrap();
+                for target in &port.targets {
+                    let name = &port.name;
+                    let out = transform(name, target, &reference, &palette, "")
+                        .unwrap_or_else(|e| panic!("port {name}, theme {theme}: {e:#}"));
+                    let again = transform(name, target, &reference, &palette, &out.text).unwrap();
+                    assert_eq!(again.text, out.text, "port {name}, theme {theme}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn upstream_themes_exist_for_every_accent() {
+        let accents = [
+            "rosewater",
+            "flamingo",
+            "pink",
+            "mauve",
+            "red",
+            "maroon",
+            "peach",
+            "yellow",
+            "green",
+            "teal",
+            "sky",
+            "sapphire",
+            "blue",
+            "lavender",
+        ];
+        for port in port::embedded().unwrap() {
+            for target in &port.targets {
+                for (theme, file) in &target.upstream {
+                    let reference = Reference {
+                        theme: theme.clone(),
+                        ..Reference::default()
+                    };
+                    for accent in accents {
+                        let palette = reference
+                            .palette()
+                            .unwrap()
+                            .with_accent(Some(accent))
+                            .unwrap();
+                        transform(&port.name, target, &reference, &palette, "")
+                            .unwrap_or_else(|e| panic!("{} {file} {accent}: {e:#}", port.name));
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
     fn ports_match_their_golden_files() {
         let reference = Reference::default();
         let palette = palette::load("catppuccin-frappe").unwrap();
         let cases = port::golden_cases();
         assert!(!cases.is_empty());
-        for (port, target, input, expected) in cases {
+        for (port, target, input, expected, path) in cases {
             let target = &target;
             let name = &port.name;
             let out = transform(name, target, &reference, &palette, input).unwrap();
+            // VIMIFY_BLESS=1 rewrites the expected files, to review as a diff.
+            if std::env::var_os("VIMIFY_BLESS").is_some() {
+                let file = Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("ports")
+                    .join(&path);
+                fs::write(file, &out.text).unwrap();
+                continue;
+            }
             assert_eq!(out.text, expected, "port {name}");
             assert!(out.warnings.is_empty(), "port {name}: {:?}", out.warnings);
             let again = transform(name, target, &reference, &palette, &out.text).unwrap();

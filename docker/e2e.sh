@@ -63,7 +63,7 @@ reset() {
   rm -rf ~/.config/lazygit ~/.config/lazydocker ~/.config/lfk ~/.config/lazysql \
     ~/.config/bat ~/.config/btop ~/.config/k9s ~/.config/yazi ~/.stu ~/.config/lesskey ~/.config/gitui \
     ~/.config/vimify ~/.local/state/vimify ~/.cache/vimify \
-    ~/.config/tmux ~/.config/kitty ~/.config/alacritty ~/.tmux.conf ~/.tmux.conf.bak*
+    ~/.config/kitty ~/.config/alacritty
   mkdir -p ~/.config/lazysql
   cp /tmp/lazysql.seed "$LAZYSQL"
 }
@@ -132,19 +132,30 @@ gui:
     activeBorderColor:
       - '#8caaee'
       - bold
-    defaultFgColor:
-      - '#c6d0f5'
     inactiveBorderColor:
-      - '#51576d'
-    optionsTextColor:
-      - '#8caaee'
+      - '#a5adce'
     searchingActiveBorderColor:
       - '#e5c890'
-      - bold
+    optionsTextColor:
+      - '#8caaee'
     selectedLineBgColor:
       - '#414559'
+    inactiveViewSelectedLineBgColor:
+      - '#737994'
+    cherryPickedCommitFgColor:
+      - '#8caaee'
+    cherryPickedCommitBgColor:
+      - '#51576d'
+    markedBaseCommitFgColor:
+      - '#8caaee'
+    markedBaseCommitBgColor:
+      - '#e5c890'
     unstagedChangesColor:
       - '#e78284'
+    defaultFgColor:
+      - '#c6d0f5'
+    authorColors:
+      '*': '#babbf1'
 keybinding:
   universal:
     nextItem-alt: j # my own binding
@@ -411,7 +422,6 @@ test_versions_are_detected_and_shown() {
   on_screen 'gitui .*0\.28\.1 .*supported'
   on_screen 'stu .*0\.7\.6 .*supported'
   on_screen 'less .*supported'
-  on_screen 'tmux .*3\.5\.0 .*supported'
   on_screen 'kitty .*0\.41\.1 .*supported'
   on_screen 'alacritty .*0\.15\.1 .*supported'
   close
@@ -481,7 +491,7 @@ test_lazydocker_shows_the_palette() {
   screen -e | grep -aq "$BORDER" || fail 'border colour not on screen'
 }
 
-test_lfk_shows_the_palette() {
+test_lfk_shows_its_catppuccin_colorscheme() {
   reset
   apply
   close
@@ -570,7 +580,8 @@ test_yazi_honours_what_vimify_wrote() {
   tmux -u new-session -d -s app -x 150 -y 40 "$TRUECOLOR yazi /tmp/yazi-demo; sleep 60"
   wait_for 'two' || return
   sleep 1
-  local selected='48;2;65;69;89'
+  # Catppuccin's yazi theme marks the current row in the accent.
+  local selected=$ACCENT_BG
   screen -e | grep -a "$selected" | grep -aq one || fail 'first row not in the selection colour'
   screen -e | grep -aq "$ACCENT" || fail 'accent colour not on screen'
   tmux -u send-keys -t app m
@@ -584,7 +595,7 @@ test_yazi_honours_what_vimify_wrote() {
   screen -e | grep -a "$selected" | grep -aq two || fail "yazi's own j stopped working"
 }
 
-test_btop_shows_the_palette() {
+test_btop_shows_the_catppuccin_theme() {
   reset
   apply
   close
@@ -593,12 +604,14 @@ test_btop_shows_the_palette() {
   wait_for 'proc' || return
   sleep 2
   screen -e | grep -aq "$ACCENT" || fail 'accent colour not on screen'
-  screen -e | grep -aq "$BORDER" || fail 'border colour not on screen'
+  # The theme's cpu box, in mauve.
+  screen -e | grep -aq '38;2;202;158;230' || fail 'cpu box colour not on screen'
   screen -e | grep -aq "$BASE_BG" || fail 'base background not on screen'
   # Vim mode: the process list follows j.
   tmux -u send-keys -t app j
   sleep 1
-  screen -e | grep -aq "$SELECTION" || fail 'selection colour not on screen'
+  # The theme's selection, surface1.
+  screen -e | grep -aq '48;2;81;87;109' || fail 'selection colour not on screen'
   tmux -u send-keys -t app q
   sleep 1
   # btop rewrites its config on exit: that is not a manual edit.
@@ -608,7 +621,7 @@ test_btop_shows_the_palette() {
   close
 }
 
-test_bat_uses_the_palette_theme() {
+test_bat_uses_the_catppuccin_theme() {
   reset
   mkdir -p ~/.config/bat
   printf -- '--theme=TwoDark\n--paging=never\n' >~/.config/bat/config
@@ -619,7 +632,7 @@ test_bat_uses_the_palette_theme() {
   printf 'fn main() {}\n' >/tmp/demo.rs
   local out
   out=$(batcat --color=always --decorations=never /tmp/demo.rs 2>&1)
-  # Frappe's mauve, the palette's special role, on the keyword.
+  # Frappe's mauve on the keyword.
   case "$out" in
     *'38;2;202;158;230mfn'*) ;;
     *) fail "bat does not colour with the vimify theme: $out" ;;
@@ -664,29 +677,7 @@ test_less_honours_what_vimify_wrote() {
   absent ~/.config/lesskey
 }
 
-test_tmux_loads_what_vimify_wrote() {
-  reset
-  printf 'set-option -g mouse on\n' >~/.tmux.conf
-  cp ~/.tmux.conf /tmp/original
-  mkdir -p ~/.config/vimify
-  printf '[keys]\nyank = "Y"\n' >"$REFERENCE"
-  apply
-  # Its own socket: the harness server loaded ~/.tmux.conf before the apply.
-  tmux -L vimify -f ~/.tmux.conf new-session -d -s probe
-  local keys
-  keys=$(tmux -L vimify list-keys -T copy-mode-vi)
-  printf '%s' "$keys" | grep -q 'Y  *send-keys -X copy-selection-and-cancel' ||
-    fail 'Y does not yank in copy mode'
-  printf '%s' "$keys" | grep -q 'search-forward' || fail '/ does not search'
-  [ "$(tmux -L vimify show -gwv mode-keys)" = vi ] || fail 'mode-keys is not vi'
-  [ "$(tmux -L vimify show -gv mouse)" = on ] || fail 'the user option was lost'
-  tmux -L vimify show-messages | grep -qi error && fail 'tmux reported config errors'
-  tmux -L vimify kill-server
-  revert
-  is_original ~/.tmux.conf
-}
-
-test_terminals_get_the_palette() {
+test_terminals_get_the_catppuccin_theme() {
   reset
   mkdir -p ~/.config/kitty ~/.config/alacritty
   printf 'font_size 12.0\n' >~/.config/kitty/kitty.conf
@@ -694,10 +685,12 @@ test_terminals_get_the_palette() {
   cp ~/.config/kitty/kitty.conf /tmp/kitty.original
   cp ~/.config/alacritty/alacritty.toml /tmp/alacritty.original
   apply
-  in_file ~/.config/kitty/kitty.conf 'background #303446'
-  in_file ~/.config/kitty/kitty.conf 'color6 #81c8be'
-  in_file ~/.config/alacritty/alacritty.toml 'cyan = "#81c8be"'
+  in_file ~/.config/kitty/kitty.conf 'background  *#303446'
+  in_file ~/.config/kitty/kitty.conf 'color6  *#81c8be'
+  in_file ~/.config/alacritty/alacritty.toml 'import = \["~/.config/alacritty/vimify.toml"\]'
+  in_file ~/.config/alacritty/vimify.toml 'cyan = "#81c8be"'
   revert
+  absent ~/.config/alacritty/vimify.toml
   cmp -s ~/.config/kitty/kitty.conf /tmp/kitty.original || fail 'kitty.conf not restored'
   cmp -s ~/.config/alacritty/alacritty.toml /tmp/alacritty.original ||
     fail 'alacritty.toml not restored'

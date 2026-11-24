@@ -80,6 +80,36 @@ impl Port {
     pub fn theme_settings(&self) -> usize {
         self.targets.iter().map(|t| t.theme.len()).sum()
     }
+
+    /// Which themes come from the tool, which from an official port, for the info modal.
+    pub fn theme_summary(&self) -> String {
+        let themes = |pick: fn(&Target) -> Vec<&String>| {
+            let mut names: Vec<&str> = self
+                .targets
+                .iter()
+                .flat_map(pick)
+                .map(String::as_str)
+                .collect();
+            names.sort();
+            names.dedup();
+            names.join(", ")
+        };
+        let builtin = themes(|t| t.builtin.keys().collect());
+        let upstream = themes(|t| t.upstream.keys().collect());
+        let palette = format!("{} settings", self.theme_settings());
+        let mut parts = Vec::new();
+        if !builtin.is_empty() {
+            parts.push(format!("built in for {builtin}"));
+        }
+        if !upstream.is_empty() {
+            parts.push(format!("official port for {upstream}"));
+        }
+        if parts.is_empty() {
+            return palette;
+        }
+        parts.push(format!("palette otherwise ({palette})"));
+        parts.join("; ")
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -107,7 +137,7 @@ pub enum Format {
 pub enum Strategy {
     Edit,
     Block,
-    /// The whole file is the template, for a file only vimify writes.
+    /// The whole file is the template or upstream theme: vimify owns it.
     File,
     Include,
 }
@@ -129,6 +159,20 @@ pub struct Target {
     /// Line a `block` target writes per key after its template, with `{key}` and
     /// `{setting}` placeholders, for configs that bind as `key action` lines.
     pub key_line: Option<String>,
+    /// Theme → settings selecting a theme the tool ships, in place of `theme`.
+    #[serde(default)]
+    pub builtin: BTreeMap<String, BTreeMap<String, ThemeValue>>,
+    /// Theme → official port file under `ports/<tool>/`, `{accent}` filled with the
+    /// accent's name. It replaces the template, or `theme` for an `edit` target.
+    #[serde(default)]
+    pub upstream: BTreeMap<String, String>,
+}
+
+/// Where a target's theme comes from for one theme ([vision.md](vision.md#themes)).
+pub enum Source<'a> {
+    Builtin(&'a BTreeMap<String, ThemeValue>),
+    Upstream(&'a str),
+    Palette,
 }
 
 impl Target {
@@ -144,6 +188,16 @@ impl Target {
 
     pub fn candidates(&self) -> Vec<PathBuf> {
         self.paths.iter().filter_map(|p| paths::expand(p)).collect()
+    }
+
+    pub fn source(&self, theme: &str) -> Source<'_> {
+        if let Some(settings) = self.builtin.get(theme) {
+            return Source::Builtin(settings);
+        }
+        match self.upstream.get(theme) {
+            Some(file) => Source::Upstream(file),
+            None => Source::Palette,
+        }
     }
 
     fn editable(&self) -> bool {
@@ -184,6 +238,14 @@ pub fn embedded() -> Result<Vec<Port>> {
         .collect::<Result<Vec<_>>>()?;
     ports.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(ports)
+}
+
+/// Text of an upstream theme file, by its path under `ports/<tool>/`.
+pub fn theme_file(tool: &str, path: &str) -> Result<&'static str> {
+    EMBEDDED
+        .get_file(format!("{tool}/{path}"))
+        .and_then(|f| f.contents_utf8())
+        .with_context(|| format!("port {tool} has no theme file {path}"))
 }
 
 /// Tool name and text of every embedded port.
@@ -282,7 +344,6 @@ const HOME_CONFIG_DIRS: &[&str] = &[
     "Library/Application Support/",
     ".stu/",
     ".lesskey",
-    ".tmux.conf",
     ".alacritty.toml",
 ];
 
@@ -346,11 +407,43 @@ fn validate_target(target: &Target) -> Result<()> {
     if target.key_line.is_some() != block_keys {
         bail!("a key_line belongs to a block target with keys, and such a target needs one");
     }
-    let values = target.theme.values().flat_map(|value| match value {
-        ThemeValue::One(s) => std::slice::from_ref(s),
-        ThemeValue::Many(items) => items.as_slice(),
-    });
-    for text in values.chain(&target.template) {
+    let themes = palette::names();
+    for theme in target.builtin.keys().chain(target.upstream.keys()) {
+        if !themes.contains(&theme.as_str()) {
+            bail!("unknown theme {theme}");
+        }
+    }
+    if let Some(theme) = target
+        .builtin
+        .keys()
+        .find(|t| target.upstream.contains_key(*t))
+    {
+        bail!("theme {theme} is both builtin and upstream");
+    }
+    let merged = target.strategy == Strategy::Edit && edit::merges(target.format);
+    if !target.upstream.is_empty() && !(templated || merged) {
+        bail!("an upstream theme needs a template to replace, or a format it can merge");
+    }
+    let builtin = target.builtin.values().flat_map(BTreeMap::values);
+    if builtin
+        .flat_map(texts)
+        .any(|t| palette::placeholders(t).next().is_some())
+    {
+        bail!("a builtin theme takes no roles");
+    }
+    for (setting, value) in &target.theme {
+        if let Some(member) = member(setting)
+            && *value != ThemeValue::One(member.to_owned())
+        {
+            bail!("{setting} must be set to {member}");
+        }
+    }
+    for text in target
+        .theme
+        .values()
+        .flat_map(texts)
+        .chain(&target.template)
+    {
         for role in palette::placeholders(text) {
             if !palette::ROLES.contains(&role) {
                 bail!("unknown role {role}");
@@ -360,10 +453,25 @@ fn validate_target(target: &Target) -> Result<()> {
     Ok(())
 }
 
-/// Target, input and expected text of every `tests/*.input.*` file. `keymap.input.toml`
+fn texts(value: &ThemeValue) -> &[String] {
+    match value {
+        ThemeValue::One(s) => std::slice::from_ref(s),
+        ThemeValue::Many(items) => items.as_slice(),
+    }
+}
+
+/// `import[=a.toml]` names its list entry, so the value must be that entry.
+fn member(setting: &str) -> Option<&str> {
+    let last = edit::split(setting).pop()?;
+    last.strip_suffix(']')?
+        .split_once("[=")
+        .map(|(_, member)| member)
+}
+
+/// Target, input, expected text and expected file of every `tests/*.input.*` file. `keymap.input.toml`
 /// tests the target writing `keymap.toml`; a stem no target has tests the first.
 #[cfg(test)]
-pub fn golden_cases() -> Vec<(Port, Target, &'static str, &'static str)> {
+pub fn golden_cases() -> Vec<(Port, Target, &'static str, &'static str, String)> {
     let mut cases = Vec::new();
     for tool in EMBEDDED.dirs() {
         let name = tool.path().to_string_lossy().into_owned();
@@ -378,8 +486,9 @@ pub fn golden_cases() -> Vec<(Port, Target, &'static str, &'static str)> {
             for file in tests.files() {
                 let path = file.path().to_string_lossy();
                 if let Some((stem, ext)) = path.rsplit_once(".input.") {
+                    let expected_path = format!("{stem}.expected.{ext}");
                     let expected = EMBEDDED
-                        .get_file(format!("{stem}.expected.{ext}"))
+                        .get_file(&expected_path)
                         .and_then(|f| f.contents_utf8())
                         .unwrap_or_else(|| panic!("{path} has no expected file"));
                     let port = parse(&name, text).unwrap();
@@ -387,7 +496,8 @@ pub fn golden_cases() -> Vec<(Port, Target, &'static str, &'static str)> {
                     let writes = |t: &&Target| t.paths.iter().any(|p| file_stem(p) == Some(test));
                     let target = port.targets.iter().find(writes).unwrap_or(&port.targets[0]);
                     let target = target.clone();
-                    cases.push((port, target, file.contents_utf8().unwrap(), expected));
+                    let input = file.contents_utf8().unwrap();
+                    cases.push((port, target, input, expected, expected_path));
                 }
             }
         }
@@ -606,7 +716,19 @@ mod tests {
         assert_eq!(port.targets.len(), 2);
         assert_eq!(port.action_coverage().0, ["up", "yank"]);
         assert_eq!(port.theme_settings(), 1);
+        assert_eq!(port.theme_summary(), "1 settings");
         assert!(port.writable());
+    }
+
+    #[test]
+    fn theme_summary_names_the_sources() {
+        let text = format!(
+            "{YAML}[target.keys]\na = \"up\"\n[target.theme]\nb = \"{{accent}}\"\n[target.builtin.catppuccin-mocha]\nc = \"d\"\n[target.upstream]\ncatppuccin-latte = \"x.yml\"\n"
+        );
+        assert_eq!(
+            parse("x", &text).unwrap().theme_summary(),
+            "built in for catppuccin-mocha; official port for catppuccin-latte; palette otherwise (1 settings)"
+        );
     }
 
     #[test]

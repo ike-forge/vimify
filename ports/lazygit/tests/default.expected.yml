@@ -7,19 +7,30 @@ gui:
       - '#8caaee'
       - bold
     lightTheme: false # dark terminal
-    defaultFgColor:
-      - '#c6d0f5'
     inactiveBorderColor:
-      - '#51576d'
-    optionsTextColor:
-      - '#8caaee'
+      - '#a5adce'
     searchingActiveBorderColor:
       - '#e5c890'
-      - bold
+    optionsTextColor:
+      - '#8caaee'
     selectedLineBgColor:
       - '#414559'
+    inactiveViewSelectedLineBgColor:
+      - '#737994'
+    cherryPickedCommitFgColor:
+      - '#8caaee'
+    cherryPickedCommitBgColor:
+      - '#51576d'
+    markedBaseCommitFgColor:
+      - '#8caaee'
+    markedBaseCommitBgColor:
+      - '#e5c890'
     unstagedChangesColor:
       - '#e78284'
+    defaultFgColor:
+      - '#c6d0f5'
+    authorColors:
+      '*': '#babbf1'
 
 git:
   paging:

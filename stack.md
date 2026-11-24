@@ -21,9 +21,10 @@ not own.
 | RON                | Own field editor, values verbatim                  |
 | Line-based (`txt`) | Owned block between `# >>> vimify >>>` markers     |
 
-Not `include`/`import`/`source` of a vimify-owned file, even where a tool
-supports it: most tools cannot, and every tool should behave the same. Only for a
-tool with no other way.
+Settings are edited in place, not loaded through `include`/`import`/`source` of
+a vimify-owned file: most tools cannot, and every tool should behave the same. An
+upstream theme file is the exception: it is copied, or included where the tool
+loads one.
 
 > **Weak point:** `yaml-edit` is a single-maintainer crate with little adoption.
 > It passed preservation tests on lazygit-style configs (nested set, key insert,

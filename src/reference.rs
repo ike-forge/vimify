@@ -6,14 +6,20 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use toml_edit::{Array, DocumentMut, table, value};
 
+use crate::palette::{self, Palette};
 use crate::{actions, fsx, paths, state};
 
 const DEFAULT_THEME: &str = "catppuccin-frappe";
+
+/// Tools whose port was removed: still accepted in a saved `exclusions`, then dropped.
+const RETIRED: &[&str] = &["tmux"];
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct Reference {
     pub theme: String,
+    /// One of the theme's named accents; unset keeps the theme's own.
+    pub accent: Option<String>,
     pub keys: BTreeMap<String, String>,
     pub scan: Scan,
     /// Ports the user unchecked; they start unchecked on later runs.
@@ -31,6 +37,7 @@ impl Default for Reference {
     fn default() -> Self {
         Self {
             theme: DEFAULT_THEME.to_owned(),
+            accent: None,
             keys: default_keys(),
             scan: Scan::default(),
             exclusions: Vec::new(),
@@ -48,6 +55,9 @@ fn default_keys() -> BTreeMap<String, String> {
 #[derive(Serialize)]
 struct Hashed<'a> {
     theme: &'a str,
+    // Unset leaves the hash as it was before accents, so no tool re-applies for them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    accent: Option<&'a str>,
     keys: &'a BTreeMap<String, String>,
 }
 
@@ -57,9 +67,14 @@ impl Reference {
     pub fn hash(&self) -> Result<String> {
         let text = toml::to_string(&Hashed {
             theme: &self.theme,
+            accent: self.accent.as_deref(),
             keys: &self.keys,
         })?;
         Ok(state::hash(text.as_bytes()))
+    }
+
+    pub fn palette(&self) -> Result<Palette> {
+        palette::load(&self.theme)?.with_accent(self.accent.as_deref())
     }
 }
 
@@ -94,7 +109,10 @@ fn parse_saved(text: &str, known: &[&str]) -> Result<Reference> {
             "exclusions not set: run `vimify apply` once, or set `exclusions = []` to apply to every tool"
         );
     }
-    let reference = parse(text)?;
+    let mut reference = parse(text)?;
+    reference
+        .exclusions
+        .retain(|t| !RETIRED.contains(&t.as_str()));
     if let Some(tool) = reference
         .exclusions
         .iter()
@@ -206,6 +224,13 @@ mod tests {
     }
 
     #[test]
+    fn an_accent_changes_the_hash_and_the_palette() {
+        assert_ne!(hash("accent = \"mauve\"\n"), hash(""));
+        let reference = parse("accent = \"mauve\"\n").unwrap();
+        assert_eq!(reference.palette().unwrap().role("accent"), Some("#ca9ee6"));
+    }
+
+    #[test]
     fn partial_keys_keep_the_other_defaults() {
         let reference = parse("[keys]\ndown = \"n\"\n").unwrap();
         assert_eq!(reference.keys["down"], "n");
@@ -290,6 +315,12 @@ mod tests {
         assert!(parse_saved("exclusions = \"btop\"\n", KNOWN).is_err());
         assert!(parse_saved("exclusions = [1]\n", KNOWN).is_err());
         assert!(parse_saved("exclusions = [\n", KNOWN).is_err());
+    }
+
+    #[test]
+    fn saved_config_drops_retired_tools() {
+        let reference = parse_saved("exclusions = [\"tmux\", \"btop\"]\n", KNOWN).unwrap();
+        assert_eq!(reference.exclusions, ["btop"]);
     }
 
     #[test]

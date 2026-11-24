@@ -3,7 +3,7 @@ use anyhow::{Context, Result};
 use crate::actions::Notation;
 use crate::edit::{self, Value};
 use crate::palette::{self, Palette};
-use crate::port::{Target, ThemeValue};
+use crate::port::{self, Source, Target, ThemeValue};
 use crate::reference::Reference;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -40,26 +40,66 @@ pub fn render(
             (None, _) => warnings.push(format!("{tool} cannot express key {key}")),
         }
     }
-    for (setting, value) in &target.theme {
-        let value = match value {
-            ThemeValue::One(s) => Value::Str(fill(s, palette)?),
-            ThemeValue::Many(items) => Value::List(
-                items
-                    .iter()
-                    .map(|s| fill(s, palette))
-                    .collect::<Result<_>>()?,
-            ),
-        };
-        values.push((setting.clone(), value));
+    let mut template = match &target.template {
+        Some(template) => Some(fill(template, palette)?),
+        None => None,
+    };
+    match target.source(&reference.theme) {
+        Source::Builtin(settings) => {
+            for (setting, value) in settings {
+                values.push((setting.clone(), verbatim(value)));
+            }
+        }
+        Source::Upstream(file) => {
+            let text = upstream(tool, file, palette)?;
+            if template.is_some() {
+                template = Some(text.trim_end_matches('\n').to_owned());
+            } else {
+                values.extend(edit::settings(target.format, text)?);
+            }
+        }
+        Source::Palette => {
+            for (setting, value) in &target.theme {
+                let value = match value {
+                    ThemeValue::One(s) => Value::Str(fill(s, palette)?),
+                    ThemeValue::Many(items) => Value::List(
+                        items
+                            .iter()
+                            .map(|s| fill(s, palette))
+                            .collect::<Result<_>>()?,
+                    ),
+                };
+                values.push((setting.clone(), value));
+            }
+        }
     }
-    if let Some(template) = &target.template {
-        let text = std::iter::once(fill(template, palette)?)
+    if let Some(template) = template {
+        let text = std::iter::once(template)
             .chain(key_lines)
             .collect::<Vec<_>>()
             .join("\n");
         values.push((edit::BLOCK.to_owned(), Value::Str(text)));
     }
     Ok(Rendered { values, warnings })
+}
+
+fn verbatim(value: &ThemeValue) -> Value {
+    match value {
+        ThemeValue::One(s) => Value::Str(s.clone()),
+        ThemeValue::Many(items) => Value::List(items.clone()),
+    }
+}
+
+fn upstream(tool: &str, file: &str, palette: &Palette) -> Result<&'static str> {
+    let path = if file.contains("{accent}") {
+        let accent = palette
+            .accent_name()
+            .context("this theme has no named accents")?;
+        file.replace("{accent}", accent)
+    } else {
+        file.to_owned()
+    };
+    port::theme_file(tool, &path)
 }
 
 fn fill(value: &str, palette: &Palette) -> Result<String> {

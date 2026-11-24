@@ -4,10 +4,11 @@
 
 | Term          | Meaning                                                              |
 | ------------- | -------------------------------------------------------------------- |
-| Reference     | User's `~/.config/vimify/config.toml`: theme, keys, scan paths, exclusions. Unset theme and actions take built-in defaults |
+| Reference     | User's `~/.config/vimify/config.toml`: theme, accent, keys, scan paths, exclusions. Unset theme and actions take built-in defaults |
 | Action        | A vimify-defined verb (`down`, `yank`, ...) bound to a key in the reference |
 | Role          | A semantic colour slot (`accent`, `selection`, ...) filled by a palette |
-| Palette       | Role → hex map for one theme (`catppuccin-frappe`). Ships with vimify |
+| Palette       | Role → hex map for one theme (`catppuccin-frappe`). Ships with vimify. A palette with `[accents]` lets the reference pick its `accent` by name |
+| Theme source  | Where a port's theme comes from: `builtin`, `upstream` or `palette` |
 | Port          | Data file describing how one tool maps actions and roles to its config |
 | Plan          | List of file operations computed from reference + ports + state; shown before anything is written |
 | State         | What vimify applied, per tool. Drives status and revert              |
@@ -117,8 +118,8 @@ line:
 [[target]]
 format = "lines"
 strategy = "block"
-paths = ["~/.tmux.conf", "$XDG_CONFIG_HOME/tmux/tmux.conf"]
-template = "set-option -g status-style \"bg={surface},fg={text}\""
+paths = ["$XDG_CONFIG_HOME/kitty/kitty.conf"]
+template = "background {base}"
 ```
 
 A port that changes a target's format or strategy takes out what the old one wrote
@@ -134,6 +135,38 @@ key_line = "{key} {setting}"
 [target.keys]
 forw-line = "down"
 ```
+
+### Theme sources
+
+A port's theme takes the first source the tool has ([vision.md](vision.md#themes)):
+
+| Source     | Writes                                                          |
+| ---------- | --------------------------------------------------------------- |
+| `builtin`  | The tool's setting selecting its own theme                      |
+| `upstream` | The official port's file for the flavour, copied or included    |
+| `palette`  | `{role}` values filled from the palette, as above               |
+
+```toml
+[target.builtin.catppuccin-frappe]
+"appearance.colorscheme" = "catppuccin-frappe"
+
+[target.upstream]
+catppuccin-frappe = "themes/frappe/{accent}.yml"
+```
+
+An upstream file replaces the template of a `block` or `file` target, or is merged
+setting by setting into an `edit` target (YAML only). `{accent}` in its path takes
+the accent's name. A theme with neither falls back to `theme` and the template, so
+every port keeps a palette version. A setting the new source no longer writes, as
+after a theme change, goes back to its backup value.
+
+Upstream themes are committed under `ports/<tool>/themes/` by
+`scripts/sync-themes.sh`, from pinned commits, with their licence and a `SOURCE`
+file. A refresh is a reviewed diff and a port version bump, which re-applies them.
+The build never fetches them.
+
+A tool that imports a theme file gets a list entry: `"general.import[=~/.config/alacritty/vimify.toml]"`
+adds that string to the list after the user's entries, and revert takes it back out.
 
 ### Sources and versioning
 
@@ -178,7 +211,7 @@ A key the notation cannot express skips that binding with a warning.
 | --------- | -------------------------------------------- | ------------------------------ |
 | `edit`    | Owned key paths in place, via format editor  | Restore owned keys             |
 | `block`   | Region between `# >>> vimify >>>` markers    | Remove block                   |
-| `file`    | Whole file from the template, for a file only vimify writes where markers cannot come first (XML declaration) | Restore backup or delete, edits included |
+| `file`    | Whole file from the template or upstream theme: a file vimify owns, or a tool's theme file it takes over | Restore backup or delete, edits included |
 | `include` | Not implemented: only for a tool `edit` and `block` cannot reach ([stack.md](stack.md#tool-config-editing)) | |
 
 Format editors share one trait so `yaml-edit` stays swappable
@@ -252,6 +285,9 @@ src/
 
 - Every port ships golden tests: `tests/*.input.*` rendered with a fixed
   reference must equal `*.expected.*`. CI runs them for all ports.
+  `VIMIFY_BLESS=1 cargo test golden` rewrites the expected files, to review as a diff.
+- Every port renders under every theme and accent, which covers the sources the
+  golden files' default theme does not.
 - Editors get preservation tests (comments, ordering, quoting, flow style).
 - `apply`/`revert` run against a temp `$HOME`.
 - `docker/e2e.sh` drives the real vimify and real tools through tmux. Every port

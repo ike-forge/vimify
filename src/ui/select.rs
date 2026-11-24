@@ -270,10 +270,7 @@ fn info(tool: &Tool) -> Vec<Line<'static>> {
         };
         lines.push(field("Keys", list(bound)));
         lines.push(field("Not mapped", list(unbound)));
-        lines.push(field(
-            "Theme",
-            format!("{} settings", port.theme_settings()),
-        ));
+        lines.push(field("Theme", port.theme_summary()));
     }
     if let Some(notes) = &port.notes {
         lines.push(Line::default());

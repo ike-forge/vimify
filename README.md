@@ -53,6 +53,9 @@ One reference config drives every tool:
 
 ```toml
 theme = "catppuccin-frappe"
+# Optional, Catppuccin only: rosewater, flamingo, pink, mauve, red, maroon, peach,
+# yellow, green, teal, sky, sapphire, blue (default), lavender.
+accent = "mauve"
 
 [keys]
 left = "h"
@@ -74,14 +77,17 @@ extra_paths = ["~/tools/bin"]
 ```
 
 Themes: `catppuccin-latte`, `catppuccin-frappe`, `catppuccin-macchiato`,
-`catppuccin-mocha`, `solarized-light`, `solarized-dark`.
+`catppuccin-mocha`, `solarized-light`, `solarized-dark`. A Catppuccin theme is the
+tool's own where it ships one, else the official Catppuccin port, copied into vimify
+under its MIT licence. Other themes, and tools without either, get vimify's palette.
+vimify takes the theme over: edits to a tool's theme are replaced.
 
 Commit it to your dotfiles. Committing the generated tool configs is only useful
 if you also edit them outside vimify.
 
 ## Supported tools
 
-lazygit, yazi, gitui, tmux, lfk, lazysql, less, stu, lazydocker, btop, alacritty,
+lazygit, yazi, gitui, lfk, lazysql, less, stu, lazydocker, btop, alacritty,
 kitty, bat and k9s, from
 most to least covered. Coverage varies with what each tool lets you configure: see
 [support.md](support.md).

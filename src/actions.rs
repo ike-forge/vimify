@@ -43,9 +43,6 @@ pub enum Notation {
     Lesskey,
     /// Bubble Tea v2: `ctrl+u`, `alt+x`, `space`, `pgdown`.
     Plus,
-    /// tmux `bind-key`: `C-u`, `M-x`, `NPage`, quoted where the config parser would
-    /// read the key as syntax.
-    Tmux,
     /// The tool spells keys as the reference does.
     Vim,
 }
@@ -60,7 +57,6 @@ impl Notation {
             Notation::Stu => stu(key),
             Notation::Lesskey => lesskey(key),
             Notation::Plus => plus(key),
-            Notation::Tmux => tmux(key),
             Notation::Vim => Some(key.to_owned()),
         }
     }
@@ -109,53 +105,6 @@ fn plus(key: &str) -> Option<String> {
         Some(("a", ch)) => format!("alt+{ch}"),
         _ => inner.to_owned(),
     })
-}
-
-fn tmux(key: &str) -> Option<String> {
-    let name = if key.chars().count() == 1 {
-        match key {
-            " " => "Space".to_owned(),
-            _ if key.chars().any(char::is_whitespace) => return None,
-            _ => key.to_owned(),
-        }
-    } else {
-        let inner = key.strip_prefix('<')?.strip_suffix('>')?.to_lowercase();
-        if let Some((m @ ("c" | "a"), ch)) = inner.split_once('-')
-            && ch.chars().count() == 1
-            && ch.chars().all(|c| c.is_ascii_graphic())
-        {
-            let modifier = if m == "c" { "C" } else { "M" };
-            format!("{modifier}-{ch}")
-        } else {
-            let name = match inner.as_str() {
-                "cr" | "enter" | "return" => "Enter",
-                "bs" | "backspace" => "BSpace",
-                "del" | "delete" => "DC",
-                "esc" => "Escape",
-                "tab" => "Tab",
-                "space" => "Space",
-                "up" => "Up",
-                "down" => "Down",
-                "left" => "Left",
-                "right" => "Right",
-                "home" => "Home",
-                "end" => "End",
-                "insert" => "IC",
-                "pageup" | "pgup" => "PPage",
-                "pagedown" | "pgdown" | "pgdn" => "NPage",
-                _ => return None,
-            };
-            name.to_owned()
-        }
-    };
-    // Unquoted, # starts a comment, ; ends the command, { opens a block and $ or ~ expand.
-    if name.chars().all(|c| c.is_alphanumeric() || c == '-') {
-        Some(name)
-    } else if name.contains('\'') {
-        Some(format!("\"{name}\""))
-    } else {
-        Some(format!("'{name}'"))
-    }
 }
 
 fn gitui(key: &str) -> Option<String> {
@@ -353,30 +302,6 @@ mod tests {
         assert_eq!(lesskey("<PageUp>").as_deref(), Some("\\kU"));
         assert_eq!(lesskey("<F1>"), None);
         assert_eq!(lesskey("é"), None);
-    }
-
-    #[test]
-    fn tmux_spells_modifiers_and_names() {
-        let tmux = |k| Notation::Tmux.convert(k);
-        assert_eq!(tmux("j").as_deref(), Some("j"));
-        assert_eq!(tmux("G").as_deref(), Some("G"));
-        assert_eq!(tmux(" ").as_deref(), Some("Space"));
-        assert_eq!(tmux("<C-u>").as_deref(), Some("C-u"));
-        assert_eq!(tmux("<A-x>").as_deref(), Some("M-x"));
-        assert_eq!(tmux("<PageDown>").as_deref(), Some("NPage"));
-        assert_eq!(tmux("<Del>").as_deref(), Some("DC"));
-        assert_eq!(tmux("<F1>"), None);
-    }
-
-    #[test]
-    fn tmux_quotes_keys_its_parser_would_read_as_syntax() {
-        let tmux = |k| Notation::Tmux.convert(k);
-        assert_eq!(tmux("/").as_deref(), Some("'/'"));
-        assert_eq!(tmux("#").as_deref(), Some("'#'"));
-        assert_eq!(tmux(";").as_deref(), Some("';'"));
-        assert_eq!(tmux("\\").as_deref(), Some("'\\'"));
-        assert_eq!(tmux("'").as_deref(), Some("\"'\""));
-        assert_eq!(tmux("<A-;>").as_deref(), Some("'M-;'"));
     }
 
     #[test]

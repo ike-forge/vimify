@@ -1,5 +1,5 @@
 schema = 1
-version = "0.1.0"
+version = "0.2.0"
 binaries = ["kitty"]
 versions = ">=0.41"
 
@@ -40,3 +40,9 @@ color12 {accent}
 color13 {special}
 color14 {info}
 color15 {text}'''
+
+[target.upstream]
+catppuccin-latte = "themes/latte.conf"
+catppuccin-frappe = "themes/frappe.conf"
+catppuccin-macchiato = "themes/macchiato.conf"
+catppuccin-mocha = "themes/mocha.conf"

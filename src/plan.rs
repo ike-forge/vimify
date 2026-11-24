@@ -197,10 +197,9 @@ fn file_edited_by_hand(file: &AppliedFile) -> bool {
     let Ok(editor) = edit::open(file.format, file.strategy, &text) else {
         return true;
     };
-    file.owned.iter().any(|(setting, value)| {
-        let path: Vec<&str> = setting.split('.').collect();
-        editor.get(&path).as_ref() != Some(value)
-    })
+    file.owned
+        .iter()
+        .any(|(setting, value)| editor.get(&edit::split(setting)).as_ref() != Some(value))
 }
 
 /// Exclusions for tools not detected this run are kept.
@@ -252,6 +251,8 @@ mod tests {
             theme: BTreeMap::new(),
             template: None,
             key_line: None,
+            builtin: BTreeMap::new(),
+            upstream: BTreeMap::new(),
         }
     }
 

@@ -1,10 +1,10 @@
 schema = 1
-version = "0.1.0"
+version = "0.2.0"
 binaries = ["alacritty"]
 # The config moved from YAML to TOML in 0.13.
 versions = ">=0.13"
 
-notes = "Theme only: a vi mode binding needs its key, modifiers and mode written together, which vimify cannot do yet. Vi mode's own keys already are h, j, k, l, y, g, G, ctrl+u, ctrl+d and /. Settings here override any imported theme."
+notes = "Theme only: a vi mode binding needs its key, modifiers and mode written together, which vimify cannot do yet. Vi mode's own keys already are h, j, k, l, y, g, G, ctrl+u, ctrl+d and /. The theme is its own file, imported after the user's imports, so colours set in alacritty.toml still win."
 
 [[target]]
 format = "toml"
@@ -15,32 +15,61 @@ paths = [
   "~/.alacritty.toml",
 ]
 
+# A home path, not XDG: the import must name the same file from any config location.
 [target.theme]
-"colors.primary.foreground" = "{text}"
-"colors.primary.background" = "{base}"
-"colors.cursor.text" = "{base}"
-"colors.cursor.cursor" = "{text}"
-"colors.vi_mode_cursor.text" = "{base}"
-"colors.vi_mode_cursor.cursor" = "{accent}"
-"colors.selection.text" = "{text}"
-"colors.selection.background" = "{selection}"
-"colors.search.matches.foreground" = "{base}"
-"colors.search.matches.background" = "{warning}"
-"colors.search.focused_match.foreground" = "{base}"
-"colors.search.focused_match.background" = "{accent}"
-"colors.normal.black" = "{border}"
-"colors.normal.red" = "{error}"
-"colors.normal.green" = "{success}"
-"colors.normal.yellow" = "{warning}"
-"colors.normal.blue" = "{accent}"
-"colors.normal.magenta" = "{special}"
-"colors.normal.cyan" = "{info}"
-"colors.normal.white" = "{text}"
-"colors.bright.black" = "{muted}"
-"colors.bright.red" = "{error}"
-"colors.bright.green" = "{success}"
-"colors.bright.yellow" = "{warning}"
-"colors.bright.blue" = "{accent}"
-"colors.bright.magenta" = "{special}"
-"colors.bright.cyan" = "{info}"
-"colors.bright.white" = "{text}"
+"general.import[=~/.config/alacritty/vimify.toml]" = "~/.config/alacritty/vimify.toml"
+
+[[target]]
+format = "toml"
+strategy = "file"
+paths = ["~/.config/alacritty/vimify.toml"]
+template = '''
+[colors.primary]
+foreground = "{text}"
+background = "{base}"
+
+[colors.cursor]
+text = "{base}"
+cursor = "{text}"
+
+[colors.vi_mode_cursor]
+text = "{base}"
+cursor = "{accent}"
+
+[colors.selection]
+text = "{text}"
+background = "{selection}"
+
+[colors.search.matches]
+foreground = "{base}"
+background = "{warning}"
+
+[colors.search.focused_match]
+foreground = "{base}"
+background = "{accent}"
+
+[colors.normal]
+black = "{border}"
+red = "{error}"
+green = "{success}"
+yellow = "{warning}"
+blue = "{accent}"
+magenta = "{special}"
+cyan = "{info}"
+white = "{text}"
+
+[colors.bright]
+black = "{muted}"
+red = "{error}"
+green = "{success}"
+yellow = "{warning}"
+blue = "{accent}"
+magenta = "{special}"
+cyan = "{info}"
+white = "{text}"'''
+
+[target.upstream]
+catppuccin-latte = "themes/catppuccin-latte.toml"
+catppuccin-frappe = "themes/catppuccin-frappe.toml"
+catppuccin-macchiato = "themes/catppuccin-macchiato.toml"
+catppuccin-mocha = "themes/catppuccin-mocha.toml"

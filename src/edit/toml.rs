@@ -36,6 +36,12 @@ impl Editor for TomlEditor {
             }
             table = table.get(key)?.as_table_like()?;
         }
+        if let Some(entry) = Entry::member(last) {
+            let array = table.get(entry.array)?.as_array()?;
+            return entry
+                .member_position(array)
+                .map(|_| Value::Str(entry.value.to_owned()));
+        }
         table.get(last).map(from_toml)
     }
 
@@ -55,7 +61,8 @@ impl Editor for TomlEditor {
 }
 
 /// `keymap[run=quit]`: the entry of the `keymap` array whose `run` is `quit`, for tools
-/// that key a list of tables by one of their fields.
+/// that key a list of tables by one of their fields. `import[=a.toml]`, with no field,
+/// is the string entry `a.toml` of a list the user may add to.
 struct Entry<'a> {
     array: &'a str,
     field: &'a str,
@@ -73,6 +80,16 @@ impl<'a> Entry<'a> {
         })
     }
 
+    fn member(segment: &'a str) -> Option<Self> {
+        Self::parse(segment).filter(|entry| entry.field.is_empty())
+    }
+
+    fn member_position(&self, array: &Array) -> Option<usize> {
+        array
+            .iter()
+            .position(|item| item.as_str() == Some(self.value))
+    }
+
     fn position(&self, array: &Array) -> Option<usize> {
         array.iter().position(|item| {
             let field = item.as_inline_table().and_then(|t| t.get(self.field));
@@ -85,6 +102,49 @@ impl<'a> Entry<'a> {
     }
 }
 
+/// Appended after the user's entries, which load first.
+fn set_member(table: &mut dyn TableLike, entry: &Entry) -> Result<()> {
+    if !table.contains_key(entry.array) {
+        table.insert(entry.array, Item::Value(Array::new().into()));
+    }
+    let Some(array) = table.get_mut(entry.array).and_then(Item::as_array_mut) else {
+        bail!("{} is not an inline array", entry.array);
+    };
+    if entry.member_position(array).is_none() {
+        let indent = trailing_indent(array);
+        array.push(entry.value);
+        if let (Some(indent), Some(item)) = (indent, array.iter_mut().last()) {
+            item.decor_mut().set_prefix(indent);
+        }
+    }
+    Ok(())
+}
+
+fn restore_member(table: &mut dyn TableLike, original: Option<&dyn TableLike>, entry: &Entry) {
+    let source = original
+        .and_then(|t| t.get(entry.array))
+        .and_then(Item::as_array);
+    if source.is_some_and(|a| entry.member_position(a).is_some()) {
+        return;
+    }
+    let Some(array) = table.get_mut(entry.array).and_then(Item::as_array_mut) else {
+        return;
+    };
+    if let Some(position) = entry.member_position(array) {
+        array.remove(position);
+    }
+    if array.is_empty() && source.is_none() {
+        table.remove(entry.array);
+    }
+}
+
+/// A multi-line array stays one: `push` would put the entry on the last line.
+fn trailing_indent(array: &Array) -> Option<String> {
+    let last = array.iter().last().and_then(|item| item.decor().prefix());
+    last.and_then(|prefix| prefix.as_str()?.rsplit_once('\n'))
+        .map(|(_, indent)| format!("\n{indent}"))
+}
+
 fn set_entry(table: &mut dyn TableLike, entry: &Entry, field: &str, value: &Value) -> Result<()> {
     if !table.contains_key(entry.array) {
         table.insert(entry.array, Item::Value(Array::new().into()));
@@ -93,11 +153,7 @@ fn set_entry(table: &mut dyn TableLike, entry: &Entry, field: &str, value: &Valu
         bail!("{} is not an inline array", entry.array);
     };
     let position = entry.position(array).unwrap_or_else(|| {
-        // A multi-line array stays one: `push` would put the entry on the last line.
-        let last = array.iter().last().and_then(|item| item.decor().prefix());
-        let indent = last
-            .and_then(|prefix| prefix.as_str()?.rsplit_once('\n'))
-            .map(|(_, indent)| format!("\n{indent}"));
+        let indent = trailing_indent(array);
         let mut new = InlineTable::new();
         new.insert(entry.field, entry.value.into());
         array.push(new);
@@ -155,6 +211,9 @@ fn set_in(table: &mut dyn TableLike, path: &[&str], value: &Value) -> Result<()>
     let [key, rest @ ..] = path else {
         bail!("empty path");
     };
+    if let (Some(entry), []) = (Entry::member(key), rest) {
+        return set_member(table, &entry);
+    }
     if let (Some(entry), [field]) = (Entry::parse(key), rest) {
         return set_entry(table, &entry, field, value);
     }
@@ -197,6 +256,10 @@ fn restore_in(current: &mut dyn TableLike, original: Option<&dyn TableLike>, pat
     let [key, rest @ ..] = path else {
         return;
     };
+    if let (Some(entry), []) = (Entry::member(key), rest) {
+        restore_member(current, original, &entry);
+        return;
+    }
     if let (Some(entry), [field]) = (Entry::parse(key), rest) {
         restore_entry(current, original, &entry, field);
         return;
@@ -490,5 +553,29 @@ mod tests {
     fn an_array_of_tables_is_refused() {
         let text = "[[mgr.prepend_keymap]]\non = \"x\"\nrun = \"mine\"\n";
         assert!(edit(text, ENTRY, str("j")).is_err());
+    }
+
+    const IMPORT: &[&str] = &["general", "import[=~/.config/a/vimify.toml]"];
+
+    #[test]
+    fn a_member_is_appended_after_the_users_entries() {
+        let text = "[general]\nimport = [\"mine.toml\"]\n";
+        let out = edit(text, IMPORT, str("~/.config/a/vimify.toml")).unwrap();
+        assert_eq!(
+            out,
+            "[general]\nimport = [\"mine.toml\", \"~/.config/a/vimify.toml\"]\n"
+        );
+        assert_eq!(get(&out, IMPORT), Some(str("~/.config/a/vimify.toml")));
+        assert_eq!(get(text, IMPORT), None);
+        assert_eq!(restore(&out, IMPORT, text), text);
+    }
+
+    #[test]
+    fn a_member_creates_its_list_and_revert_drops_it() {
+        let out = edit("", IMPORT, str("~/.config/a/vimify.toml")).unwrap();
+        assert_eq!(out, "[general]\nimport = [\"~/.config/a/vimify.toml\"]\n");
+        let again = edit(&out, IMPORT, str("~/.config/a/vimify.toml")).unwrap();
+        assert_eq!(again, out);
+        assert_eq!(restore(&out, IMPORT, ""), "");
     }
 }

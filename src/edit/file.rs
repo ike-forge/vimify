@@ -2,7 +2,7 @@ use anyhow::{Result, bail};
 
 use super::{Editor, Value};
 
-/// A file vimify writes whole, where markers cannot come first (XML declaration).
+/// A file vimify writes whole: one it owns, or a tool's theme file it takes over.
 pub struct FileEditor {
     text: String,
 }

@@ -1,5 +1,5 @@
 schema = 1
-version = "0.1.0"
+version = "0.2.0"
 binaries = ["k9s"]
 version_args = ["version", "-s"]
 versions = ">=0.40"
@@ -64,3 +64,9 @@ paths = [
 "k9s.views.table.header.fgColor" = "{accent}"
 "k9s.views.table.header.bgColor" = "default"
 "k9s.views.table.header.sorterColor" = "{warning}"
+
+[target.upstream]
+catppuccin-latte = "themes/catppuccin-latte.yaml"
+catppuccin-frappe = "themes/catppuccin-frappe.yaml"
+catppuccin-macchiato = "themes/catppuccin-macchiato.yaml"
+catppuccin-mocha = "themes/catppuccin-mocha.yaml"

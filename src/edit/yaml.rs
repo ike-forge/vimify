@@ -67,6 +67,43 @@ impl Editor for YamlEditor {
     }
 }
 
+/// Every leaf of `text` as a dotted setting, for an upstream theme merged key by key.
+/// Only mappings, scalars and lists of scalars: anything else has no setting to own.
+pub fn settings(text: &str) -> Result<Vec<(String, Value)>> {
+    let doc = Document::from_str(text).map_err(|e| anyhow!("{e}"))?;
+    let root = doc.as_mapping().context("top level is not a mapping")?;
+    let mut out = Vec::new();
+    collect(&root, "", &mut out)?;
+    Ok(out)
+}
+
+fn collect(mapping: &Mapping, prefix: &str, out: &mut Vec<(String, Value)>) -> Result<()> {
+    for (key, node) in mapping.iter() {
+        let key = scalar(&key);
+        if key.contains(['.', '[', ']']) {
+            bail!("key {key} cannot be a setting");
+        }
+        let path = if prefix.is_empty() {
+            key
+        } else {
+            format!("{prefix}.{key}")
+        };
+        if let Some(child) = node.as_mapping() {
+            collect(child, &path, out)?;
+        } else if let Some(sequence) = node.as_sequence() {
+            if sequence.values().any(|item| item.as_scalar().is_none()) {
+                bail!("{path} is a list of more than scalars");
+            }
+            out.push((path, from_yaml(&node)));
+        } else if node.as_scalar().is_some() {
+            out.push((path, Value::Str(scalar(&node))));
+        } else {
+            bail!("{path} is not a scalar");
+        }
+    }
+    Ok(())
+}
+
 fn is_blank_or_comment(line: &str) -> bool {
     let line = line.trim();
     line.is_empty() || line.starts_with('#')
@@ -336,5 +373,28 @@ mod tests {
         let once = edit("a: 1\n", &["b", "c"], list(&["x"])).unwrap();
         let twice = edit(&once, &["b", "c"], list(&["x"])).unwrap();
         assert_eq!(once, twice);
+    }
+
+    #[test]
+    fn settings_flatten_mappings_and_keep_lists() {
+        let text = "gui:\n  theme:\n    active:\n      - '#8caaee'\n      - bold\n    authorColors:\n      '*': '#babbf1'\n";
+        assert_eq!(
+            settings(text).unwrap(),
+            [
+                (
+                    "gui.theme.active".to_owned(),
+                    Value::List(vec!["#8caaee".into(), "bold".into()])
+                ),
+                (
+                    "gui.theme.authorColors.*".to_owned(),
+                    Value::Str("#babbf1".into())
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn settings_refuse_lists_of_mappings() {
+        assert!(settings("a:\n  - b: c\n").is_err());
     }
 }
