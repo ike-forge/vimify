@@ -95,7 +95,7 @@ accept() {
 close_after_read() { OUTPUT=$(screen); close; }
 
 apply() { confirm && accept; }
-revert() { confirm j j j Space && accept; }
+revert() { confirm j j Space j Space && accept; }
 
 on_screen() { screen | grep -q -- "$1" || fail "screen lacks '$1'"; }
 off_screen() { ! screen | grep -q -- "$1" || fail "screen shows '$1'"; }
@@ -226,7 +226,7 @@ test_unusable_config_fails_without_touching_it() {
 test_revert_of_an_untouched_file_is_byte_identical() {
   seed
   apply
-  confirm j j j Space
+  confirm j j Space j Space
   on_screen 'revert .*lazygit'
   off_screen 'updated manually'
   accept
@@ -295,7 +295,7 @@ test_unrelated_edits_are_not_manual_and_survive_revert() {
   confirm
   on_screen 'current .*lazygit'
   off_screen 'by hand'
-  confirm j j j Space
+  confirm j j Space j Space
   off_screen 'updated manually'
   accept
   is_text "${ORIGINAL/autoFetch: false # corporate proxy/autoFetch: true # by hand}os: {editPreset: nvim} # by hand"
@@ -326,7 +326,7 @@ test_manual_key_edit_warns_on_revert() {
   apply
   sed -i 's/prevItem-alt: k/prevItem-alt: i/' "$CFG"
   sed -i 's/autoFetch: false # corporate proxy/autoFetch: true # by hand/' "$CFG"
-  confirm j j j Space
+  confirm j j Space j Space
   on_screen 'changed by hand'
   on_screen 'updated manually, force revert'
   accept

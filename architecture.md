@@ -34,10 +34,11 @@ scan ──▶ select ──▶ plan ──▶ confirm ──▶ execute ──�
 2. **select:** `Apply changes`, then a choice between `apply everywhere` and
    `select manually`, `select none`, then detected tools with status (`applied`,
    `modified`, `update`). Enter on `Apply changes` goes to confirm; on any other
-   row it toggles. `apply everywhere` checks every supported tool; changing any
-   checkbox switches to `select manually`, keeping the other checks. It starts
-   selected on a first run and with `tools = "all"`; otherwise `select manually`
-   starts with the tools in `tools` checked. Unsupported tools are greyed out at
+   row it toggles. `apply everywhere` checks every supported tool and greys out
+   the rows below the choice, which then do nothing. `select manually` keeps the
+   checks and makes them editable. `apply everywhere` starts selected on a first
+   run and with `tools = "all"`; otherwise `select manually` starts with the
+   tools in `tools` checked. Unsupported tools are greyed out at
    the bottom and cannot be checked. `i` opens a modal with what the port covers.
 3. **plan:** checkboxes are desired state, diffed against state:
 

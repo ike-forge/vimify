@@ -1,7 +1,7 @@
 use ratatui::Frame;
 use ratatui::crossterm::event::KeyCode;
 use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::style::Stylize;
+use ratatui::style::{Style, Stylize};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear, ListItem, ListState, Paragraph, Wrap};
 
@@ -32,7 +32,8 @@ impl Tool {
 
 pub struct SelectScreen {
     tools: Vec<Tool>,
-    /// Saves `tools = "all"`; any change to a tool's checkbox leaves it.
+    /// Saves `tools = "all"`. The rows below it are greyed out and inert until
+    /// `select manually`.
     everywhere: bool,
     cursor: usize,
     /// Index into `tools` of the tool shown in the info modal.
@@ -130,16 +131,11 @@ impl SelectScreen {
                 self.set_all(true);
             }
             2 => self.everywhere = false,
-            3 => {
-                self.everywhere = false;
-                self.set_all(false);
-            }
+            _ if self.everywhere => {}
+            3 => self.set_all(false),
             i => {
                 let tool = &mut self.tools[i - ACTIONS];
-                if tool.supported() {
-                    tool.checked = !tool.checked;
-                    self.everywhere = false;
-                }
+                tool.checked = tool.supported() && !tool.checked;
             }
         }
     }
@@ -168,8 +164,16 @@ impl SelectScreen {
             .map(|t| t.detection.port.len())
             .max()
             .unwrap_or(0);
+        let manual = |item: ListItem<'static>| {
+            if self.everywhere {
+                item.style(Style::new().dim())
+            } else {
+                item
+            }
+        };
         let items = [
             ListItem::new(Line::from(" Apply changes ".reversed())),
+            ListItem::new(""),
             radio(
                 self.everywhere,
                 vec![
@@ -178,7 +182,8 @@ impl SelectScreen {
                 ],
             ),
             radio(!self.everywhere, vec!["select manually".into()]),
-            row(self.none_checked(), vec!["select none".into()]),
+            ListItem::new(""),
+            manual(row(self.none_checked(), vec!["select none".into()])),
             ListItem::new(Line::from("─".repeat(width.max("select manually".len()) + 4)).dim()),
         ]
         .into_iter()
@@ -194,7 +199,7 @@ impl SelectScreen {
             } else {
                 "supported".green()
             };
-            row(
+            manual(row(
                 tool.checked,
                 vec![
                     Span::from(name),
@@ -202,13 +207,14 @@ impl SelectScreen {
                     status,
                     Span::from(format!("  {}", paths::display(&tool.detection.path))).dim(),
                 ],
-            )
+            ))
         }));
-        // The separator occupies a list index but is not selectable.
-        let index = if self.cursor < ACTIONS {
-            self.cursor
-        } else {
-            self.cursor + 1
+        // The blank lines and the separator occupy list indices but are not selectable.
+        let index = match self.cursor {
+            0 => 0,
+            1 | 2 => self.cursor + 1,
+            3 => self.cursor + 2,
+            _ => self.cursor + 3,
         };
         let mut state = ListState::default().with_selected(Some(index));
 
@@ -389,7 +395,7 @@ mod tests {
     #[test]
     fn select_none_then_everywhere() {
         let mut s = screen(&["a", "b"]);
-        press(&mut s, "jjj ");
+        press(&mut s, "jj j ");
         assert!(s.none_checked() && !s.everywhere());
         press(&mut s, "kk ");
         assert!(s.everywhere());
@@ -405,9 +411,17 @@ mod tests {
     }
 
     #[test]
+    fn everywhere_ignores_the_manual_rows() {
+        let mut s = screen(&["a", "b"]);
+        press(&mut s, "jjj jj ");
+        assert!(s.everywhere());
+        assert_eq!(s.selection(), selection(&["a", "b"], &[]));
+    }
+
+    #[test]
     fn toggling_a_tool_updates_action_rows() {
         let mut s = screen(&["a", "b"]);
-        press(&mut s, "jjjj ");
+        press(&mut s, "jj jj ");
         assert_eq!(s.selection(), selection(&["b"], &["a"]));
         assert!(!s.everywhere() && !s.none_checked());
     }
@@ -434,16 +448,15 @@ mod tests {
     #[test]
     fn unsupported_tools_cannot_be_toggled() {
         let mut s = mixed(&[], &["a"], None);
-        press(&mut s, "jjjj ");
+        press(&mut s, "jj jj ");
         assert_eq!(s.selection(), selection(&[], &[]));
         assert!(!s.tools[0].checked);
-        assert!(s.everywhere());
     }
 
     #[test]
     fn everywhere_skips_unsupported_tools() {
         let mut s = mixed(&["a"], &["b"], None);
-        press(&mut s, "jjj ");
+        press(&mut s, "jj j ");
         assert!(s.none_checked());
         press(&mut s, "kk ");
         assert_eq!(s.selection(), selection(&["a"], &[]));
@@ -473,7 +486,7 @@ mod tests {
     #[test]
     fn keys_do_not_reach_the_list_while_the_modal_is_open() {
         let mut s = screen(&["a"]);
-        press(&mut s, "jjjji ");
+        press(&mut s, "jj jji ");
         assert!(s.tools[0].checked);
     }
 
@@ -520,7 +533,7 @@ mod tests {
     #[test]
     fn enter_confirms_on_the_button_and_toggles_elsewhere() {
         let mut s = screen(&["a"]);
-        press(&mut s, "G");
+        press(&mut s, "jj G");
         assert!(!s.handle(KeyCode::Enter));
         assert!(!s.tools[0].checked);
         press(&mut s, "g");
