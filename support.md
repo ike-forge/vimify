@@ -21,7 +21,7 @@ blank: the tool has no such action
 | alacritty  | ≥ 0.13   |  ❌  |  ❌  |  ❌  |  ❌   |  ❌  |        |      |  ✅   |
 | kitty      | ≥ 0.41   |  ➖  |  ➖  |  ➖  |  ➖   |  ➖  |        |  ➖  |  ✅   |
 | bat        | ≥ 0.25   |  ➖  |  ➖  |  ➖  |  ➖   |      |        |  ➖  |  ✅   |
-| k9s        | ≥ 0.40   |  ➖  |  ➖  |  ➖  |  ➖   |  ➖  |   ➖   |  ➖  |  ✅   |
+| k9s        | ≥ 0.40   |  ➖  |  ➖  |  ➖  |  ➖   |  ➖  |   ➖   |  ✅  |  ✅   |
 
 | Tool       | top | bottom | page_up | page_down | search | help |
 | ---------- | :-: | :----: | :-----: | :-------: | :----: | :--: |
@@ -71,8 +71,9 @@ major version ([architecture.md](architecture.md#sources-and-versioning)).
 - **lfk**: quit, top, bottom and paging stay on q, g, G, ctrl+u and ctrl+d, which lfk
   hardcodes. help takes the keymaps panel (`?`); F1 still opens the help screen.
   delete takes resource deletion, which confirms first, and diff moves from d to D.
-- **k9s**: theme only, through a `vimify` skin. k9s has no keymap; j and k are built
-  in. A skin set per cluster or context wins over it.
+- **k9s**: theme through a `vimify` skin, quit through a `quit` hotkey. k9s has no
+  keymap; j and k are built in. In resource lists the hotkey replaces q going back,
+  which esc still does. A skin or hotkey set per cluster or context wins over vimify's.
 - **lazydocker**: theme only; it has no configurable keybindings. Its own h, j, k, l,
   d and q are already vim's.
 - **alacritty**: theme only. A vi mode binding needs its key, modifiers and mode
@@ -102,7 +103,7 @@ major version ([architecture.md](architecture.md#sources-and-versioning)).
 | stu        | `~/.stu/keybindings.toml`                                     |
 | btop       | `btop/btop.conf`, `btop/themes/vimify.theme`                  |
 | lfk        | `lfk/config.yaml`                                             |
-| k9s        | `k9s/config.yaml`, `k9s/skins/vimify.yaml`                    |
+| k9s        | `k9s/config.yaml`, `k9s/skins/vimify.yaml`, `k9s/hotkeys.yaml` |
 | less       | `lesskey` (marked block), or `~/.lesskey` if it exists        |
 | lazydocker | `lazydocker/config.yml`                                       |
 | bat        | `bat/config`, `bat/themes/vimify.tmTheme`                     |

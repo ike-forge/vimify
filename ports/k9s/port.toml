@@ -1,10 +1,29 @@
 schema = 1
-version = "0.2.0"
+version = "0.3.0"
 binaries = ["k9s"]
 version_args = ["version", "-s"]
 versions = ">=0.40"
 
-notes = "Theme only: k9s has no navigation keymap, and already takes j and k. A skin set per cluster or context wins over this one."
+notes = "k9s has no navigation keymap, and already takes j and k. quit is a hotkey: in resource lists it replaces q going back, which esc still does. A skin or hotkey set per cluster or context wins over this one."
+
+[[target]]
+format = "yaml"
+strategy = "edit"
+key_notation = "k9s"
+paths = [
+  "$K9S_CONFIG_DIR/hotkeys.yaml",
+  "$XDG_CONFIG_HOME/k9s/hotkeys.yaml",
+  "~/Library/Application Support/k9s/hotkeys.yaml",
+]
+
+[target.keys]
+"hotKeys.quit.shortCut" = "quit"
+
+# Not theme, but fixed: a hotkey on a key k9s binds is dropped without override.
+[target.theme]
+"hotKeys.quit.command" = "quit"
+"hotKeys.quit.description" = "Quit"
+"hotKeys.quit.override" = true
 
 # A skin is its own file, selected by k9s.ui.skin.
 [[target]]

@@ -43,6 +43,8 @@ pub enum Notation {
     Lesskey,
     /// Bubble Tea v2: `ctrl+u`, `alt+x`, `space`, `pgdown`.
     Plus,
+    /// k9s: its own names for letters, digits, `?`, `/` and space, else tcell's.
+    K9s,
     /// The tool spells keys as the reference does.
     Vim,
 }
@@ -57,6 +59,7 @@ impl Notation {
             Notation::Stu => stu(key),
             Notation::Lesskey => lesskey(key),
             Notation::Plus => plus(key),
+            Notation::K9s => k9s(key),
             Notation::Vim => Some(key.to_owned()),
         }
     }
@@ -242,6 +245,22 @@ fn lesskey(key: &str) -> Option<String> {
     Some(name.to_owned())
 }
 
+/// k9s looks a key up by exact name, and names only these single keys.
+fn k9s(key: &str) -> Option<String> {
+    if key.chars().count() == 1 {
+        return match key.chars().next()? {
+            ' ' => Some("space".to_owned()),
+            ch @ ('a'..='z' | '0'..='9' | '?' | '/') => Some(ch.to_string()),
+            ch @ 'A'..='Z' => Some(format!("Shift-{ch}")),
+            _ => None,
+        };
+    }
+    if key.eq_ignore_ascii_case("<space>") {
+        return Some("space".to_owned());
+    }
+    tcell(key)
+}
+
 /// stu lowercases what it reads, so `G` must be `shift-g`, and it reads one byte as a
 /// char, so non-ASCII keys cannot be bound.
 fn stu(key: &str) -> Option<String> {
@@ -281,6 +300,19 @@ mod tests {
 
     fn stu(key: &str) -> Option<String> {
         Notation::Stu.convert(key)
+    }
+
+    #[test]
+    fn k9s_names_its_own_keys_and_defers_to_tcell() {
+        let k9s = |k| Notation::K9s.convert(k);
+        assert_eq!(k9s("q").as_deref(), Some("q"));
+        assert_eq!(k9s("G").as_deref(), Some("Shift-G"));
+        assert_eq!(k9s("?").as_deref(), Some("?"));
+        assert_eq!(k9s("<Space>").as_deref(), Some("space"));
+        assert_eq!(k9s("<C-u>").as_deref(), Some("Ctrl-U"));
+        assert_eq!(k9s("<PageDown>").as_deref(), Some("PgDn"));
+        assert_eq!(k9s("<"), None);
+        assert_eq!(k9s("é"), None);
     }
 
     #[test]
