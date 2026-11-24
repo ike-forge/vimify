@@ -136,7 +136,7 @@ impl Editor for RonEditor {
     fn set(&mut self, path: &[&str], value: Value) -> Result<()> {
         let name = name(path)?;
         let Value::Str(value) = value else {
-            bail!("{name}: a list has no form in a RON config");
+            bail!("{name}: only text has a form in a RON config");
         };
         self.ensure_root();
         match self.root().fields.iter().find(|f| f.name == name) {

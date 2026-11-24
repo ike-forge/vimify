@@ -68,6 +68,7 @@ pub fn render(
                             .map(|s| fill(s, palette))
                             .collect::<Result<_>>()?,
                     ),
+                    ThemeValue::Bool(b) => Value::Bool(*b),
                 };
                 values.push((setting.clone(), value));
             }
@@ -87,6 +88,7 @@ fn verbatim(value: &ThemeValue) -> Value {
     match value {
         ThemeValue::One(s) => Value::Str(s.clone()),
         ThemeValue::Many(items) => Value::List(items.clone()),
+        ThemeValue::Bool(b) => Value::Bool(*b),
     }
 }
 

@@ -123,6 +123,7 @@ mod tests {
             owned: BTreeMap::from([
                 ("a.b".into(), Value::Str("j".into())),
                 ("a.c".into(), Value::List(vec!["x".into()])),
+                ("a.d".into(), Value::Bool(true)),
             ]),
         }
     }

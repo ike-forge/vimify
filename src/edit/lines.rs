@@ -78,7 +78,7 @@ impl Editor for LinesEditor {
     fn set(&mut self, path: &[&str], value: Value) -> Result<()> {
         let key = path.join(".");
         let Value::Str(value) = value else {
-            bail!("{key}: a list has no form in a lines config");
+            bail!("{key}: only text has a form in a lines config");
         };
         let line = match (self.syntax, self.find(&key)) {
             (Syntax::Assign, Some(i)) => {

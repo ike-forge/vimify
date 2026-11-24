@@ -96,7 +96,7 @@ fn collect(mapping: &Mapping, prefix: &str, out: &mut Vec<(String, Value)>) -> R
             }
             out.push((path, from_yaml(&node)));
         } else if node.as_scalar().is_some() {
-            out.push((path, Value::Str(scalar(&node))));
+            out.push((path, from_yaml(&node)));
         } else {
             bail!("{path} is not a scalar");
         }
@@ -161,6 +161,10 @@ fn from_yaml(node: &YamlNode) -> Value {
     if let Some(sequence) = node.as_sequence() {
         return Value::List(sequence.values().map(|item| scalar(&item)).collect());
     }
+    // Plain `true` only: a quoted one is a string.
+    if let Some(b) = node.as_scalar().and_then(|s| s.as_bool()) {
+        return Value::Bool(b);
+    }
     Value::Str(scalar(node))
 }
 
@@ -185,6 +189,7 @@ fn to_yaml(value: &Value) -> YamlValue {
         Value::List(items) => {
             YamlValue::Sequence(items.iter().map(|s| YamlValue::from(s.as_str())).collect())
         }
+        Value::Bool(b) => YamlValue::from(*b),
     }
 }
 
@@ -296,6 +301,16 @@ mod tests {
         assert_eq!(get(text, &["a", "b"]), Some(str("j")));
         assert_eq!(get(text, &["a", "c"]), Some(str("#8caaee")));
         assert_eq!(get(text, &["a", "d"]), Some(list(&["x", "y"])));
+    }
+
+    #[test]
+    fn bools_are_written_plain_and_read_back_typed() {
+        assert_eq!(
+            edit("a: 1\n", &["b"], Value::Bool(true)).unwrap(),
+            "a: 1\nb: true\n"
+        );
+        assert_eq!(get("a: false\n", &["a"]), Some(Value::Bool(false)));
+        assert_eq!(get("a: 'true'\n", &["a"]), Some(str("true")));
     }
 
     #[test]

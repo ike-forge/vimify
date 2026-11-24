@@ -18,6 +18,13 @@ pub const BLOCK: &str = "block";
 pub enum Value {
     Str(String),
     List(Vec<String>),
+    /// YAML and TOML only: a typed field rejects the string `"true"`.
+    Bool(bool),
+}
+
+/// Whether the format can write a `Value::Bool`.
+pub fn has_bools(format: Format) -> bool {
+    matches!(format, Format::Yaml | Format::Toml)
 }
 
 /// Keeps format crates swappable; see stack.md on `yaml-edit`.

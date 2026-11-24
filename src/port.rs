@@ -117,6 +117,7 @@ impl Port {
 pub enum ThemeValue {
     One(String),
     Many(Vec<String>),
+    Bool(bool),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -407,6 +408,13 @@ fn validate_target(target: &Target) -> Result<()> {
     if target.key_line.is_some() != block_keys {
         bail!("a key_line belongs to a block target with keys, and such a target needs one");
     }
+    let mut values = target
+        .theme
+        .values()
+        .chain(target.builtin.values().flat_map(BTreeMap::values));
+    if !edit::has_bools(target.format) && values.any(|v| matches!(v, ThemeValue::Bool(_))) {
+        bail!("{:?} has no bools", target.format);
+    }
     let themes = palette::names();
     for theme in target.builtin.keys().chain(target.upstream.keys()) {
         if !themes.contains(&theme.as_str()) {
@@ -457,6 +465,7 @@ fn texts(value: &ThemeValue) -> &[String] {
     match value {
         ThemeValue::One(s) => std::slice::from_ref(s),
         ThemeValue::Many(items) => items.as_slice(),
+        ThemeValue::Bool(_) => &[],
     }
 }
 
@@ -641,6 +650,14 @@ mod tests {
     fn unknown_role_is_rejected() {
         let err = parse("x", &format!("{YAML}[target.theme]\na = \"{{glow}}\"\n")).unwrap_err();
         assert!(format!("{err:#}").contains("unknown role glow"));
+    }
+
+    #[test]
+    fn a_bool_needs_a_typed_format() {
+        assert!(parse("x", &format!("{YAML}[target.theme]\na = true\n")).is_ok());
+        let text = YAML.replace("\"yaml\"", "\"lines\"");
+        let err = parse("x", &format!("{text}[target.theme]\na = true\n")).unwrap_err();
+        assert!(format!("{err:#}").contains("no bools"));
     }
 
     #[test]

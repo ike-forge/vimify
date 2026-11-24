@@ -106,6 +106,8 @@ paths = [                  # first existing wins; first resolvable is created
 ```
 
 `{role}` fills anywhere in a value (`'"{accent}"'`), for tools that want it quoted.
+A TOML `true` or `false` stays a bool, for YAML and TOML fields that refuse the
+string; other formats reject it.
 Golden tests pick their target by file stem: `theme.input.toml` tests the target
 writing `theme.toml`. Any other stem tests the first target.
 

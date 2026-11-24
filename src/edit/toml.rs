@@ -286,10 +286,14 @@ fn restore_in(current: &mut dyn TableLike, original: Option<&dyn TableLike>, pat
     }
 }
 
-/// Anything but strings is kept as text, which compares unequal to what vimify wrote.
+/// Anything but strings and bools is kept as text, which compares unequal to what
+/// vimify wrote.
 fn from_toml(item: &Item) -> Value {
     if let Some(array) = item.as_array() {
         return Value::List(array.iter().map(string).collect());
+    }
+    if let Some(b) = item.as_bool() {
+        return Value::Bool(b);
     }
     match item.as_str() {
         Some(s) => Value::Str(s.to_owned()),
@@ -308,6 +312,7 @@ fn to_toml(value: &Value) -> toml_edit::Value {
     match value {
         Value::Str(s) => s.as_str().into(),
         Value::List(items) => items.iter().map(String::as_str).collect::<Array>().into(),
+        Value::Bool(b) => (*b).into(),
     }
 }
 
@@ -337,6 +342,16 @@ mod tests {
 
     fn get(text: &str, path: &[&str]) -> Option<Value> {
         TomlEditor::parse(text).unwrap().get(path)
+    }
+
+    #[test]
+    fn bools_are_written_plain_and_read_back_typed() {
+        assert_eq!(
+            edit("a = 1\n", &["b"], Value::Bool(true)).unwrap(),
+            "a = 1\nb = true\n"
+        );
+        assert_eq!(get("a = false\n", &["a"]), Some(Value::Bool(false)));
+        assert_eq!(get("a = 'true'\n", &["a"]), Some(str("true")));
     }
 
     #[test]
