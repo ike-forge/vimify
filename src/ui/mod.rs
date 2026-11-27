@@ -1,5 +1,6 @@
 mod config;
 mod confirm;
+mod picker;
 mod rollback;
 mod scan;
 mod select;

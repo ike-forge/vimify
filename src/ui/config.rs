@@ -1,11 +1,12 @@
 use ratatui::Frame;
 use ratatui::crossterm::event::KeyCode;
-use ratatui::layout::{Constraint, Layout};
+use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::Stylize;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{ListItem, ListState, Paragraph, Wrap};
 
 use super::cursor_list;
+use super::picker::{Picked, Picker};
 use crate::reference::Reference;
 use crate::{actions, palette};
 
@@ -16,6 +17,7 @@ pub struct ConfigScreen {
     /// Rows are the buttons, then the theme, then one row per action.
     cursor: usize,
     input: Option<String>,
+    theme: Option<Picker>,
     error: Option<String>,
 }
 
@@ -26,6 +28,7 @@ impl ConfigScreen {
             reference,
             cursor: 0,
             input: None,
+            theme: None,
             error: None,
         }
     }
@@ -34,13 +37,24 @@ impl ConfigScreen {
         &self.reference
     }
 
-    /// A text input takes every key, `q` and Esc included.
+    /// A text input or the theme picker takes every key, `q` and Esc included.
     pub fn editing(&self) -> bool {
-        self.input.is_some()
+        self.input.is_some() || self.theme.is_some()
     }
 
     /// Returns true on save.
     pub fn handle(&mut self, key: KeyCode) -> bool {
+        if let Some(picker) = &mut self.theme {
+            match picker.handle(key) {
+                Some(Picked::Choice(theme)) => {
+                    self.reference.theme = theme;
+                    self.theme = None;
+                }
+                Some(Picked::Cancel) => self.theme = None,
+                None => {}
+            }
+            return false;
+        }
         if let Some(input) = &mut self.input {
             match key {
                 KeyCode::Char(c) => input.push(c),
@@ -57,9 +71,15 @@ impl ConfigScreen {
             return false;
         }
         let last = FIRST_FIELD + actions::DEFAULTS.len();
+        let on_buttons = self.cursor < FIRST_FIELD;
         match key {
+            KeyCode::Char('j') | KeyCode::Down if on_buttons => self.cursor = FIRST_FIELD,
             KeyCode::Char('j') | KeyCode::Down => self.cursor = (self.cursor + 1).min(last),
-            KeyCode::Char('k') | KeyCode::Up => self.cursor = self.cursor.saturating_sub(1),
+            KeyCode::Char('k') | KeyCode::Up if self.cursor == FIRST_FIELD => self.cursor = SAVE,
+            KeyCode::Char('k') | KeyCode::Up if !on_buttons => self.cursor -= 1,
+            KeyCode::Char('h') | KeyCode::Left if on_buttons => self.cursor = SAVE,
+            KeyCode::Char('l') | KeyCode::Right if on_buttons => self.cursor = RESET,
+            KeyCode::Tab if on_buttons => self.cursor = 1 - self.cursor,
             KeyCode::Char('g') | KeyCode::Home => self.cursor = 0,
             KeyCode::Char('G') | KeyCode::End => self.cursor = last,
             KeyCode::Enter if self.cursor == SAVE => return true,
@@ -67,6 +87,11 @@ impl ConfigScreen {
                 let defaults = Reference::default();
                 self.reference.theme = defaults.theme;
                 self.reference.keys = defaults.keys;
+                self.error = None;
+            }
+            KeyCode::Enter if self.cursor == FIRST_FIELD => {
+                let themes = palette::names().into_iter().map(str::to_owned).collect();
+                self.theme = Some(Picker::new("theme", themes, &self.reference.theme));
                 self.error = None;
             }
             KeyCode::Enter => {
@@ -84,44 +109,22 @@ impl ConfigScreen {
             return;
         };
         let text = input.trim().to_owned();
-        let field = self.cursor - FIRST_FIELD;
-        let check = if field == 0 {
-            if palette::names().contains(&text.as_str()) {
-                Ok(())
-            } else {
-                Err(format!(
-                    "Unknown theme. Known: {}",
-                    palette::names().join(", ")
-                ))
-            }
-        } else if actions::is_key(&text) {
-            Ok(())
+        if actions::is_key(&text) {
+            self.error = None;
+            let action = actions::DEFAULTS[self.cursor - FIRST_FIELD - 1].0;
+            self.reference.keys.insert(action.to_owned(), text);
         } else {
-            Err("One character, or <C-u> style.".to_owned())
-        };
-        match check {
-            Ok(()) => {
-                self.error = None;
-                match field {
-                    0 => self.reference.theme = text,
-                    i => {
-                        let action = actions::DEFAULTS[i - 1].0;
-                        self.reference.keys.insert(action.to_owned(), text);
-                    }
-                }
-            }
-            Err(e) => {
-                self.error = Some(e);
-                self.input = Some(input);
-            }
+            self.error = Some("One character, or <C-u> style.".to_owned());
+            self.input = Some(input);
         }
     }
 
     pub fn render(&self, frame: &mut Frame) {
         let fields = actions::DEFAULTS.len() + 1;
-        let [title, list, error, footer] = Layout::vertical([
+        let [title, buttons, list, error, footer] = Layout::vertical([
             Constraint::Length(2),
-            Constraint::Length((FIRST_FIELD + fields) as u16),
+            Constraint::Length(2),
+            Constraint::Length(fields as u16),
             Constraint::Fill(1),
             Constraint::Length(1),
         ])
@@ -147,15 +150,27 @@ impl ConfigScreen {
             };
             ListItem::new(Line::from(vec![label, value]))
         });
-        let buttons = [
-            ListItem::new(Line::from(" Save changes ".reversed())),
-            ListItem::new(Line::from(" Reset to defaults ")),
-        ];
-        let items = buttons.into_iter().chain(fields).collect();
-        let mut state = ListState::default().with_selected(Some(self.cursor));
+        let button = |row: usize, label: &'static str| {
+            let marker = if self.cursor == row { "› " } else { "  " };
+            let label = format!(" {label} ").reversed();
+            let label = if self.cursor == row {
+                label.bold()
+            } else {
+                label
+            };
+            [Span::from(marker).bold(), label]
+        };
+        let button_row = [
+            button(SAVE, "Save changes").to_vec(),
+            vec!["  ".into()],
+            button(RESET, "Reset to defaults").to_vec(),
+        ]
+        .concat();
+        let mut state = ListState::default().with_selected(self.cursor.checked_sub(FIRST_FIELD));
 
         frame.render_widget(Line::from(vec!["vimify".bold(), " config".into()]), title);
-        frame.render_stateful_widget(cursor_list(items), list, &mut state);
+        frame.render_widget(Line::from(button_row), buttons);
+        frame.render_stateful_widget(cursor_list(fields.collect()), list, &mut state);
         if let Some(e) = &self.error {
             frame.render_widget(
                 Paragraph::new(e.as_str()).red().wrap(Wrap { trim: true }),
@@ -168,9 +183,15 @@ impl ConfigScreen {
             "enter edit  q quit without saving"
         };
         frame.render_widget(Line::from(hint).dim(), footer);
+        if let Some(picker) = &self.theme {
+            // Over the theme's value: past the cursor symbol and the 10-wide label.
+            let anchor = Rect::new(list.x + 12, list.y, 0, 0);
+            picker.render(frame, anchor);
+        }
     }
 }
 
+/// `SAVE` and `RESET` share the top row.
 const SAVE: usize = 0;
 /// Unsaved like any edit, so `q` still backs out of it.
 const RESET: usize = 1;
@@ -218,7 +239,7 @@ mod tests {
     fn enter_saves_on_the_button_and_edits_elsewhere() {
         let mut screen = ConfigScreen::new(Reference::default());
         assert!(screen.handle(KeyCode::Enter));
-        press(&mut screen, "jj");
+        press(&mut screen, "j");
         assert!(!screen.handle(KeyCode::Enter));
         assert!(screen.editing());
     }
@@ -226,25 +247,50 @@ mod tests {
     #[test]
     fn edits_a_key() {
         let mut screen = ConfigScreen::new(Reference::default());
-        press(&mut screen, "jjjj");
+        press(&mut screen, "jjj");
         type_value(&mut screen, "<C-n>");
         assert!(!screen.editing());
         assert_eq!(screen.reference().keys["down"], "<C-n>");
     }
 
     #[test]
-    fn edits_the_theme() {
+    fn picks_the_theme_by_search() {
         let mut screen = ConfigScreen::new(Reference::default());
-        press(&mut screen, "jj");
-        type_value(&mut screen, "solarized-dark");
+        press(&mut screen, "j");
+        screen.handle(KeyCode::Enter);
+        assert!(screen.editing());
+        press(&mut screen, "/sol");
+        screen.handle(KeyCode::Enter);
+        assert!(!screen.editing());
         assert_eq!(screen.reference().theme, "solarized-dark");
         assert!(draw(80, 20, |f| screen.render(f)).contains("solarized-dark *"));
     }
 
     #[test]
+    fn theme_picker_lists_every_theme() {
+        let mut screen = ConfigScreen::new(Reference::default());
+        press(&mut screen, "j");
+        screen.handle(KeyCode::Enter);
+        let shown = draw(80, 24, |f| screen.render(f));
+        for name in palette::names() {
+            assert!(shown.contains(name), "{name} missing from\n{shown}");
+        }
+    }
+
+    #[test]
+    fn q_closes_the_theme_picker_unchanged() {
+        let mut screen = ConfigScreen::new(Reference::default());
+        press(&mut screen, "j");
+        screen.handle(KeyCode::Enter);
+        press(&mut screen, "jq");
+        assert!(!screen.editing());
+        assert_eq!(screen.reference().theme, Reference::default().theme);
+    }
+
+    #[test]
     fn invalid_key_keeps_the_input_open() {
         let mut screen = ConfigScreen::new(Reference::default());
-        press(&mut screen, "jjj");
+        press(&mut screen, "jj");
         type_value(&mut screen, "ab");
         assert!(screen.editing());
         assert!(screen.error.is_some());
@@ -252,34 +298,30 @@ mod tests {
     }
 
     #[test]
-    fn unknown_theme_is_rejected() {
-        let mut screen = ConfigScreen::new(Reference::default());
-        press(&mut screen, "jj");
-        type_value(&mut screen, "nope");
-        assert!(screen.editing());
-        assert_eq!(screen.reference().theme, Reference::default().theme);
-    }
-
-    #[test]
-    fn unknown_theme_lists_every_theme() {
-        let mut screen = ConfigScreen::new(Reference::default());
-        press(&mut screen, "jj");
-        type_value(&mut screen, "nope");
-        let shown = draw(80, 24, |f| screen.render(f)).replace('\n', " ");
-        for name in palette::names() {
-            assert!(shown.contains(name), "{name} missing from\n{shown}");
-        }
-    }
-
-    #[test]
     fn esc_discards_the_input() {
         let mut screen = ConfigScreen::new(Reference::default());
-        press(&mut screen, "jjjj");
+        press(&mut screen, "jjj");
         screen.handle(KeyCode::Enter);
         press(&mut screen, "q");
         screen.handle(KeyCode::Esc);
         assert!(!screen.editing());
         assert_eq!(screen.reference().keys["down"], "j");
+    }
+
+    #[test]
+    fn buttons_share_a_row() {
+        let mut screen = ConfigScreen::new(Reference::default());
+        press(&mut screen, "l");
+        assert_eq!(screen.cursor, RESET);
+        press(&mut screen, "j");
+        assert_eq!(screen.cursor, FIRST_FIELD);
+        press(&mut screen, "k");
+        assert_eq!(screen.cursor, SAVE);
+        let shown = draw(80, 20, |f| screen.render(f));
+        assert!(
+            shown.contains("›  Save changes      Reset to defaults "),
+            "{shown}"
+        );
     }
 
     #[test]
@@ -290,7 +332,7 @@ mod tests {
         };
         edited.keys.insert("down".into(), "n".into());
         let mut screen = ConfigScreen::new(edited);
-        press(&mut screen, "j");
+        press(&mut screen, "l");
         assert!(!screen.handle(KeyCode::Enter));
         assert_eq!(screen.reference().theme, Reference::default().theme);
         assert_eq!(screen.reference().keys, Reference::default().keys);
@@ -302,7 +344,7 @@ mod tests {
         let mut screen = ConfigScreen::new(Reference::default());
         press(&mut screen, "jj");
         screen.handle(KeyCode::Enter);
-        press(&mut screen, "jjj");
-        assert_eq!(screen.cursor, FIRST_FIELD);
+        press(&mut screen, "jj");
+        assert_eq!(screen.cursor, FIRST_FIELD + 1);
     }
 }
